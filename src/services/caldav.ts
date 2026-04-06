@@ -42,10 +42,15 @@ function xmlText(xml: string, tag: string): string {
 
 
 function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
-  const fmt = (d: Date) =>
-    event.allDay
-      ? d.toISOString().slice(0, 10).replace(/-/g, '')
-      : d.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z'
+  // DTSTAMP always UTC datetime; date-only format for all-day DTSTART/DTEND
+  const fmtUtc = (d: Date) => d.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z'
+  const fmtDate = (d: Date) => {
+    // Use local date parts to avoid timezone-shift (YYYY-MM-DD → YYYYMMDD)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}${m}${day}`
+  }
 
   const lines: string[] = [
     'BEGIN:VCALENDAR',
@@ -53,9 +58,9 @@ function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
     'PRODID:-//opencloud-agenda//EN',
     'BEGIN:VEVENT',
     `UID:${event.seriesUid ?? event.uid}`,
-    `DTSTAMP:${fmt(new Date())}`,
-    event.allDay ? `DTSTART;VALUE=DATE:${fmt(event.start)}` : `DTSTART:${fmt(event.start)}`,
-    event.allDay ? `DTEND;VALUE=DATE:${fmt(event.end)}` : `DTEND:${fmt(event.end)}`,
+    `DTSTAMP:${fmtUtc(new Date())}`,
+    event.allDay ? `DTSTART;VALUE=DATE:${fmtDate(event.start)}` : `DTSTART:${fmtUtc(event.start)}`,
+    event.allDay ? `DTEND;VALUE=DATE:${fmtDate(event.end)}` : `DTEND:${fmtUtc(event.end)}`,
     `SUMMARY:${event.title}`,
   ]
   if (event.description) lines.push(`DESCRIPTION:${event.description.replace(/\n/g, '\\n')}`)
@@ -63,7 +68,7 @@ function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
   if (event.color) lines.push(`COLOR:${event.color}`)
   if (event.rrule) lines.push(`RRULE:${event.rrule}`)
   lines.push('END:VEVENT', 'END:VCALENDAR')
-  return lines.join('\r\n')
+  return lines.join('\r\n') + '\r\n'
 }
 
 // Expansion window for recurring events (years back and forward from now)
