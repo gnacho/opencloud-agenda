@@ -471,18 +471,20 @@ watch(calendars, () => {
 :deep(.fc-daygrid-event .fc-event-resizer-end) {
   width: 14px;
   cursor: ew-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
 }
 :deep(.fc-daygrid-event .fc-event-resizer-start::after),
 :deep(.fc-daygrid-event .fc-event-resizer-end::after) {
   content: '';
-  display: block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 4px;
   height: 16px;
   background: rgba(255, 255, 255, 0.6);
   border-radius: 2px;
+  pointer-events: none;
 }
 
 /* Replace icon font (blocked by CSP font-src) with unicode characters */
