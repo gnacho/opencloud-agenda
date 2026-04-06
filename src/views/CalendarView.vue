@@ -466,23 +466,24 @@ watch(calendars, () => {
   margin-top: 2px;
 }
 
-/* dayGrid (month): vertical bars at left and right edges of multi-day events */
+/* dayGrid (month): vertical bars at left and right edges of multi-day events.
+   FC already sets position:absolute on these — do NOT override it. */
 :deep(.fc-daygrid-event .fc-event-resizer-start),
 :deep(.fc-daygrid-event .fc-event-resizer-end) {
   width: 14px;
   cursor: ew-resize;
-  position: relative;
 }
-:deep(.fc-daygrid-event .fc-event-resizer-start::after),
-:deep(.fc-daygrid-event .fc-event-resizer-end::after) {
+/* Show the bar only on real events, not on the drag mirror clone */
+:deep(.fc-daygrid-event:not(.fc-event-mirror) .fc-event-resizer-start::after),
+:deep(.fc-daygrid-event:not(.fc-event-mirror) .fc-event-resizer-end::after) {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   width: 4px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.6);
+  height: 14px;
+  background: rgba(255, 255, 255, 0.65);
   border-radius: 2px;
   pointer-events: none;
 }
