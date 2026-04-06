@@ -1,7 +1,43 @@
 import { computed } from 'vue'
 import { useAuthStore, useUserStore, useConfigStore } from '@opencloud-eu/web-pkg'
 
-const APP_TOKEN_KEY = 'oc-calendar-app-token'
+// Token is stored in localStorage keyed by user UUID so it persists across
+// sessions and is not recreated on every page load.
+const EXPIRY = '17520h' // 2 years
+const STORAGE_PREFIX = 'oc-agenda-token:'
+
+interface StoredToken {
+  token: string
+  expiresAt: number // Unix ms
+}
+
+function storageKey(userPathId: string): string {
+  return `${STORAGE_PREFIX}${userPathId}`
+}
+
+function loadStoredToken(userPathId: string): string | null {
+  try {
+    const raw = localStorage.getItem(storageKey(userPathId))
+    if (!raw) return null
+    const stored: StoredToken = JSON.parse(raw)
+    if (Date.now() >= stored.expiresAt) {
+      localStorage.removeItem(storageKey(userPathId))
+      return null
+    }
+    return stored.token
+  } catch {
+    return null
+  }
+}
+
+function saveToken(userPathId: string, token: string) {
+  const stored: StoredToken = {
+    token,
+    // 2 years minus 1 day as safety margin
+    expiresAt: Date.now() + (365 * 2 - 1) * 24 * 60 * 60 * 1000,
+  }
+  localStorage.setItem(storageKey(userPathId), JSON.stringify(stored))
+}
 
 export function useAuth() {
   const authStore = useAuthStore()
@@ -19,14 +55,13 @@ export function useAuth() {
   const accessToken = computed(() => authStore.accessToken)
 
   async function getAppToken(): Promise<string> {
-    const cached = sessionStorage.getItem(APP_TOKEN_KEY)
+    const id = userPathId.value
+    const cached = loadStoredToken(id)
     if (cached) return cached
 
-    const res = await fetch('/auth-app/tokens?expiry=72h&label=calendar-app', {
+    const res = await fetch(`/auth-app/tokens?expiry=${EXPIRY}&label=agenda`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken.value}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken.value}` },
     })
 
     if (!res.ok) throw new Error(`Failed to create app token: ${res.status} ${res.statusText}`)
@@ -35,12 +70,12 @@ export function useAuth() {
     const token: string = data.token
     if (!token) throw new Error('No app token in response')
 
-    sessionStorage.setItem(APP_TOKEN_KEY, token)
+    saveToken(id, token)
     return token
   }
 
   function clearAppToken() {
-    sessionStorage.removeItem(APP_TOKEN_KEY)
+    localStorage.removeItem(storageKey(userPathId.value))
   }
 
   return { user, userId, userPathId, serverUrl, accessToken, getAppToken, clearAppToken }
