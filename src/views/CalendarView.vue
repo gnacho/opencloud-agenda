@@ -33,6 +33,10 @@
       </ul>
 
       <p v-if="error" class="error-msg">{{ error }}</p>
+
+      <div class="sidebar-footer">
+        <a :href="helpUrl" class="help-link">? {{ de ? 'Hilfe' : 'Help' }}</a>
+      </div>
     </aside>
 
     <!-- Main calendar area -->
@@ -88,6 +92,8 @@ import { useI18n } from '@/composables/useI18n'
 import type { CalendarEvent } from '@/services/caldav'
 
 const { t } = useI18n()
+const de = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('de')
+const helpUrl = '/apps/agenda/help'
 
 const {
   loading,
@@ -438,6 +444,23 @@ watch(calendars, () => {
 .error-msg {
   color: var(--oc-color-swatch-danger-default);
   font-size: 0.8rem;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.help-link {
+  font-size: 0.8rem;
+  color: var(--oc-color-text-muted);
+  text-decoration: none;
+  opacity: 0.7;
+}
+
+.help-link:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
 
 /* ---- FullCalendar dark mode overrides ---- */
