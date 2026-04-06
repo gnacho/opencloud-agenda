@@ -43,6 +43,7 @@
       :event="editingEvent"
       :defaultStart="pendingStart ?? undefined"
       :defaultEnd="pendingEnd ?? undefined"
+      :defaultAllDay="pendingAllDay ?? undefined"
       :calendars="calendars"
       :activeCalendarHref="activeCalendarHref"
       @save="handleCreate"
@@ -56,7 +57,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import FullCalendar from '@fullcalendar/vue3'
-import type { CalendarOptions, EventClickArg, DateSelectArg, DatesSetArg } from '@fullcalendar/core'
+import type { CalendarOptions, EventClickArg, DateSelectArg, DatesSetArg, EventDropArg } from '@fullcalendar/core'
+import type { EventResizeDoneArg } from '@fullcalendar/interaction'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import listPlugin from '@fullcalendar/list'
@@ -87,11 +89,13 @@ const dialogOpen = ref(false)
 const editingEvent = ref<CalendarEvent | null>(null)
 const pendingStart = ref<Date | null>(null)
 const pendingEnd = ref<Date | null>(null)
+const pendingAllDay = ref<boolean | null>(null)
 
-function openNewEvent(start?: Date, end?: Date) {
+function openNewEvent(start?: Date, end?: Date, allDay?: boolean) {
   editingEvent.value = null
   pendingStart.value = start ?? null
   pendingEnd.value = end ?? null
+  pendingAllDay.value = allDay ?? null
   dialogOpen.value = true
 }
 
@@ -158,14 +162,48 @@ const calendarOptions = computed<CalendarOptions>(() => ({
     listWeek: { buttonText: t('list') },
   },
   selectable: true,
-  editable: false,
+  editable: true,
   events: fcEvents.value,
   select(info: DateSelectArg) {
-    openNewEvent(info.start, info.end)
+    // FC end is exclusive for all-day selections → shift back one day for the dialog
+    const end = info.allDay
+      ? new Date(info.end.getTime() - 24 * 60 * 60 * 1000)
+      : info.end
+    openNewEvent(info.start, end, info.allDay)
   },
   eventClick(info: EventClickArg) {
     const ev = info.event.extendedProps.event as CalendarEvent
     openEditEvent(ev)
+  },
+  async eventDrop(info: EventDropArg) {
+    const ev = info.event.extendedProps.event as CalendarEvent
+    const updated: CalendarEvent = {
+      ...ev,
+      start: info.event.start!,
+      end: info.event.end ?? new Date(info.event.start!.getTime() + 3600 * 1000),
+      allDay: info.event.allDay,
+    }
+    try {
+      await updateEvent(updated)
+    } catch (e: unknown) {
+      info.revert()
+      alert(e instanceof Error ? e.message : String(e))
+    }
+  },
+  async eventResize(info: EventResizeDoneArg) {
+    const ev = info.event.extendedProps.event as CalendarEvent
+    const updated: CalendarEvent = {
+      ...ev,
+      start: info.event.start!,
+      end: info.event.end!,
+      allDay: info.event.allDay,
+    }
+    try {
+      await updateEvent(updated)
+    } catch (e: unknown) {
+      info.revert()
+      alert(e instanceof Error ? e.message : String(e))
+    }
   },
   datesSet: onDatesSet,
   height: '100%',

@@ -68,6 +68,7 @@ const props = defineProps<{
   event?: CalendarEvent | null
   defaultStart?: Date
   defaultEnd?: Date
+  defaultAllDay?: boolean
   calendars: Calendar[]
   activeCalendarHref?: string | null
 }>()
@@ -98,7 +99,7 @@ const defaultCalHref =
 
 const form = reactive({
   title: props.event?.title ?? '',
-  allDay: props.event?.allDay ?? false,
+  allDay: props.event?.allDay ?? props.defaultAllDay ?? false,
   startDate: toLocalDateString(props.event?.start ?? defaultStart),
   endDate: toLocalDateString(props.event?.end ?? defaultEnd),
   startDateTime: toLocalDateTimeString(props.event?.start ?? defaultStart),
