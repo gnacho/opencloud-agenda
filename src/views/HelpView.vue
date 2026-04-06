@@ -1,5 +1,7 @@
 <template>
+  <div class="help-overlay" @click.self="$emit('close')">
   <div class="help-view">
+    <button class="close-btn" @click="$emit('close')">×</button>
     <div class="help-content">
       <h1>{{ de ? 'Hilfe – Termine' : 'Help – Agenda' }}</h1>
 
@@ -69,28 +71,71 @@
         </ul>
       </section>
 
-      <div class="version">Agenda v{{ version }}</div>
+      <footer class="help-footer">
+        © 2026 <a href="https://www.linux-nerds.org" target="_blank" rel="noopener">linux-nerds.org</a> · Agenda v{{ version }}
+      </footer>
     </div>
+  </div>
   </div>
 </template>
 
 <script setup lang="ts">
+defineEmits<{ (e: 'close'): void }>()
 const de = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('de')
 const version = '1.0.0'
 </script>
 
 <style scoped>
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
 .help-view {
-  height: 100%;
+  position: relative;
+  width: 680px;
+  max-width: 95vw;
+  max-height: 85vh;
   overflow-y: auto;
   padding: 2rem;
-  background: var(--oc-color-background-default);
-  color: var(--oc-color-text-default);
+  border-radius: 8px;
+  background: #fff;
+  color: #1a1a1a;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  .help-view {
+    background: #1e1e1e;
+    color: #e8e8e8;
+  }
+}
+
+.close-btn {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: var(--oc-color-text-muted, #888);
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+}
+
+.close-btn:hover { color: var(--oc-color-text-default, #1a1a1a); }
+
+@media (prefers-color-scheme: dark) {
+  .close-btn:hover { color: #e8e8e8; }
 }
 
 .help-content {
-  max-width: 680px;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -129,10 +174,23 @@ li {
   color: var(--oc-color-text-default);
 }
 
-.version {
+.help-footer {
   font-size: 0.75rem;
-  color: var(--oc-color-text-muted);
+  color: var(--oc-color-text-muted, #888);
   margin-top: 1rem;
-  text-align: right;
+  padding-top: 0.75rem;
+  border-top: 1px solid #ddd;
+  text-align: center;
 }
+
+@media (prefers-color-scheme: dark) {
+  .help-footer { border-top-color: #333; }
+}
+
+.help-footer a {
+  color: var(--oc-color-swatch-brand-default, #0082c9);
+  text-decoration: none;
+}
+
+.help-footer a:hover { text-decoration: underline; }
 </style>

@@ -35,7 +35,7 @@
       <p v-if="error" class="error-msg">{{ error }}</p>
 
       <div class="sidebar-footer">
-        <a :href="helpUrl" class="help-link">? {{ de ? 'Hilfe' : 'Help' }}</a>
+        <button class="help-link" @click="helpOpen = true">? {{ de ? 'Hilfe' : 'Help' }}</button>
       </div>
     </aside>
 
@@ -50,6 +50,9 @@
         :options="calendarOptions"
       />
     </main>
+
+    <!-- Help overlay -->
+    <HelpView v-if="helpOpen" @close="helpOpen = false" />
 
     <!-- Calendar creation dialog -->
     <CalendarDialog
@@ -87,13 +90,14 @@ import interactionPlugin from '@fullcalendar/interaction'
 import deLocale from '@fullcalendar/core/locales/de'
 import EventDialog from '@/components/EventDialog.vue'
 import CalendarDialog from '@/components/CalendarDialog.vue'
+import HelpView from '@/views/HelpView.vue'
 import { useCalendar } from '@/composables/useCalendar'
 import { useI18n } from '@/composables/useI18n'
 import type { CalendarEvent } from '@/services/caldav'
 
 const { t } = useI18n()
 const de = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('de')
-const helpUrl = '/apps/agenda/help'
+const helpOpen = ref(false)
 
 const {
   loading,
@@ -454,8 +458,12 @@ watch(calendars, () => {
 .help-link {
   font-size: 0.8rem;
   color: var(--oc-color-text-muted);
-  text-decoration: none;
   opacity: 0.7;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
 }
 
 .help-link:hover {

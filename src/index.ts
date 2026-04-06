@@ -39,12 +39,6 @@ export default defineWebApplication({
         component: () => import('./views/CalendarView.vue'),
         meta: { authContext: 'user', title: appInfo.name },
       },
-      {
-        name: 'agenda-help',
-        path: '/help',
-        component: () => import('./views/HelpView.vue'),
-        meta: { authContext: 'user', title: appInfo.name },
-      },
     ]
 
     const extensions = computed<Extension[]>(() => {
