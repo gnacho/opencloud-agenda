@@ -451,6 +451,32 @@ watch(calendars, () => {
   }
 }
 
+/* Resize handles — make them visible especially in dark mode */
+:deep(.fc-event-resizer-end::after) {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 2px;
+  margin: 0 auto;
+  margin-top: 2px;
+}
+:deep(.fc-daygrid-event .fc-event-resizer-end) {
+  width: 14px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  cursor: ew-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+:deep(.fc-daygrid-event .fc-event-resizer-end::after) {
+  width: 4px;
+  height: 16px;
+}
+
 /* Replace icon font (blocked by CSP font-src) with unicode characters */
 :deep(.fc-icon) {
   font-family: inherit !important;
