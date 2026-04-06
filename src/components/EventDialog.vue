@@ -1,0 +1,333 @@
+<template>
+  <div class="event-dialog-overlay" @click.self="$emit('close')">
+    <div class="event-dialog">
+      <h2>{{ isNew ? t('New Event') : t('Edit Event') }}</h2>
+
+      <label>
+        {{ t('Title') }}
+        <input v-model="form.title" type="text" :placeholder="t('Event title')" autofocus />
+      </label>
+
+      <label class="row">
+        <input v-model="form.allDay" type="checkbox" />
+        {{ t('All day') }}
+      </label>
+
+      <div class="date-row">
+        <label>
+          {{ t('Start') }}
+          <input v-if="form.allDay" v-model="form.startDate" type="date" />
+          <input v-else v-model="form.startDateTime" type="datetime-local" />
+        </label>
+        <label>
+          {{ t('End') }}
+          <input v-if="form.allDay" v-model="form.endDate" type="date" />
+          <input v-else v-model="form.endDateTime" type="datetime-local" />
+        </label>
+      </div>
+
+      <label>
+        {{ t('Location') }}
+        <input v-model="form.location" type="text" :placeholder="t('Location')" />
+      </label>
+
+      <label>
+        {{ t('Description') }}
+        <textarea v-model="form.description" rows="3" :placeholder="t('Description')" />
+      </label>
+
+      <label>
+        {{ t('Calendar') }}
+        <select v-model="form.calendarHref">
+          <option v-for="cal in calendars" :key="cal.href" :value="cal.href">
+            {{ cal.displayName }}
+          </option>
+        </select>
+      </label>
+
+      <div class="actions">
+        <button v-if="!isNew" class="danger" @click="handleDelete">{{ t('Delete') }}</button>
+        <span class="spacer" />
+        <button @click="$emit('close')">{{ t('Cancel') }}</button>
+        <button class="primary" @click="handleSave">{{ t('Save') }}</button>
+      </div>
+
+      <p v-if="saveError" class="error-msg">{{ saveError }}</p>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { reactive, ref, computed } from 'vue'
+import type { Calendar, CalendarEvent } from '@/services/caldav'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
+
+const props = defineProps<{
+  event?: CalendarEvent | null
+  defaultStart?: Date
+  defaultEnd?: Date
+  calendars: Calendar[]
+  activeCalendarHref?: string | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'save', event: Omit<CalendarEvent, 'uid' | 'calendarHref' | 'etag'> & { calendarHref: string }): void
+  (e: 'update', event: CalendarEvent): void
+  (e: 'delete', event: CalendarEvent): void
+  (e: 'close'): void
+}>()
+
+const isNew = computed(() => !props.event)
+const saveError = ref<string | null>(null)
+
+function toLocalDateString(d: Date) {
+  return d.toLocaleDateString('sv') // 'sv' locale gives YYYY-MM-DD
+}
+function toLocalDateTimeString(d: Date) {
+  return d.toLocaleDateString('sv') + 'T' + d.toTimeString().slice(0, 5)
+}
+
+const defaultStart = props.defaultStart ?? new Date()
+const defaultEnd = props.defaultEnd ?? new Date(defaultStart.getTime() + 60 * 60 * 1000)
+const defaultCalHref =
+  props.event?.calendarHref
+    ? props.calendars.find(c => props.event!.calendarHref.startsWith(c.href))?.href ?? props.activeCalendarHref ?? props.calendars[0]?.href ?? ''
+    : props.activeCalendarHref ?? props.calendars[0]?.href ?? ''
+
+const form = reactive({
+  title: props.event?.title ?? '',
+  allDay: props.event?.allDay ?? false,
+  startDate: toLocalDateString(props.event?.start ?? defaultStart),
+  endDate: toLocalDateString(props.event?.end ?? defaultEnd),
+  startDateTime: toLocalDateTimeString(props.event?.start ?? defaultStart),
+  endDateTime: toLocalDateTimeString(props.event?.end ?? defaultEnd),
+  location: props.event?.location ?? '',
+  description: props.event?.description ?? '',
+  calendarHref: defaultCalHref,
+})
+
+function parseDates() {
+  if (form.allDay) {
+    return {
+      start: new Date(form.startDate + 'T00:00:00'),
+      end: new Date(form.endDate + 'T00:00:00'),
+    }
+  }
+  return {
+    start: new Date(form.startDateTime),
+    end: new Date(form.endDateTime),
+  }
+}
+
+function handleSave() {
+  saveError.value = null
+  if (!form.title.trim()) { saveError.value = t('Title is required.'); return }
+  const { start, end } = parseDates()
+  if (end < start) { saveError.value = t('End must be after start.'); return }
+  if (!form.calendarHref) { saveError.value = t('Please select a calendar.'); return }
+
+  if (isNew.value) {
+    emit('save', {
+      title: form.title.trim(),
+      start,
+      end,
+      allDay: form.allDay,
+      location: form.location || undefined,
+      description: form.description || undefined,
+      calendarHref: form.calendarHref,
+    })
+  } else {
+    emit('update', {
+      ...props.event!,
+      title: form.title.trim(),
+      start,
+      end,
+      allDay: form.allDay,
+      location: form.location || undefined,
+      description: form.description || undefined,
+    })
+  }
+}
+
+function handleDelete() {
+  if (props.event) emit('delete', props.event)
+}
+</script>
+
+<style scoped>
+.event-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.event-dialog {
+  background: #fff;
+  color: #1a1a1a;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: 480px;
+  max-width: 95vw;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  .event-dialog {
+    background: #1e1e1e;
+    color: #e8e8e8;
+    border-color: #444;
+  }
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: inherit;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--oc-color-text-muted, #666);
+}
+
+@media (prefers-color-scheme: dark) {
+  label {
+    color: var(--oc-color-text-muted, #aaa);
+  }
+}
+
+label.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+input[type='text'],
+input[type='date'],
+input[type='datetime-local'],
+select,
+textarea {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: #f5f5f5;
+  color: #1a1a1a;
+}
+
+@media (prefers-color-scheme: dark) {
+  input[type='text'],
+  input[type='date'],
+  input[type='datetime-local'],
+  select,
+  textarea {
+    background: #2a2a2a;
+    color: #e8e8e8;
+    border-color: #555;
+  }
+}
+
+input[type='text']:focus,
+input[type='date']:focus,
+input[type='datetime-local']:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--oc-color-swatch-brand-default, #0082c9);
+  box-shadow: 0 0 0 2px rgba(0, 130, 201, 0.25);
+}
+
+/* color-scheme so browser date-pickers respect dark mode */
+input[type='date'],
+input[type='datetime-local'] {
+  color-scheme: light dark;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.date-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.spacer {
+  flex: 1;
+}
+
+button {
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+@media (prefers-color-scheme: dark) {
+  button {
+    background: #2a2a2a;
+    color: #e8e8e8;
+    border-color: #555;
+  }
+  button:hover {
+    background: #333;
+  }
+}
+
+button:hover {
+  background: #e0e0e0;
+}
+
+button.primary {
+  background: var(--oc-color-swatch-brand-default, #0082c9);
+  color: #fff;
+  border-color: transparent;
+}
+
+button.primary:hover {
+  opacity: 0.9;
+}
+
+button.danger {
+  background: var(--oc-color-swatch-danger-default, #e9322d);
+  color: #fff;
+  border-color: transparent;
+}
+
+button.danger:hover {
+  opacity: 0.9;
+}
+
+.error-msg {
+  color: var(--oc-color-swatch-danger-default, #e9322d);
+  font-size: 0.85rem;
+  margin: 0;
+}
+</style>
