@@ -96,12 +96,11 @@ function parseEvents(icsText: string, calendarHref: string, etag?: string): Cale
           new Date(now + EXPAND_YEARS * 365 * 24 * 3600 * 1000),
           false,
         )
-        const iterator = ev.iterator()
+        const iterator = ev.iterator(rangeStart)
         let next: ICAL.Time | null
         let count = 0
         while ((next = iterator.next()) && count < 500) {
           if (next.compare(rangeEnd) > 0) break
-          if (next.compare(rangeStart) < 0) continue
           const occurrence = ev.getOccurrenceDetails(next)
           const allDay = occurrence.startDate.isDate
           results.push({
