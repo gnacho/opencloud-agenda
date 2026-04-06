@@ -29,6 +29,14 @@ const translations: Record<string, string> = {
   'Delete': 'Löschen',
   'Cancel': 'Abbrechen',
   'Save': 'Speichern',
+  // CalendarDialog
+  'New Calendar': 'Neuer Kalender',
+  'Calendar Name': 'Kalendername',
+  'Calendar name': 'Kalendername',
+  'Color': 'Farbe',
+  'Create': 'Erstellen',
+  'Calendars': 'Kalender',
+  'Calendar already exists.': 'Kalender existiert bereits.',
   // Validation errors
   'Title is required.': 'Titel ist erforderlich.',
   'End must be after start.': 'Ende muss nach dem Beginn liegen.',

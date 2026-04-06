@@ -174,7 +174,7 @@ export class CalDavClient {
       Authorization: this.authHeader,
       ...extraHeaders,
     }
-    if (body) headers['Content-Type'] = 'text/calendar; charset=utf-8'
+    if (body && !headers['Content-Type']) headers['Content-Type'] = 'text/calendar; charset=utf-8'
 
     const res = await fetch(url, { method, headers, body })
     if (!res.ok && res.status !== 207) {
@@ -272,6 +272,23 @@ export class CalDavClient {
     const ics = buildIcs(event)
     const res = await this.request('PUT', event.calendarHref, ics)
     return res.headers.get('ETag')?.replace(/"/g, '') ?? undefined
+  }
+
+  // MKCALENDAR: create a new calendar collection
+  async createCalendar(name: string, color: string): Promise<Calendar> {
+    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'calendar'
+    const href = `${this.baseUrl}${slug}/`
+    const body = `<?xml version="1.0" encoding="utf-8"?>
+<mkcalendar xmlns="urn:ietf:params:xml:ns:caldav" xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+  <d:set>
+    <d:prop>
+      <d:displayname>${name.trim()}</d:displayname>
+      <oc:calendar-color>${color}</oc:calendar-color>
+    </d:prop>
+  </d:set>
+</mkcalendar>`
+    await this.request('MKCALENDAR', href, body, { 'Content-Type': 'application/xml; charset=utf-8' })
+    return { href, displayName: name.trim(), color }
   }
 
   // Build URL for a new event in a given calendar

@@ -11,6 +11,14 @@ export function useCalendar() {
   const calendars = ref<Calendar[]>([])
   const events = ref<CalendarEvent[]>([])
   const activeCalendarHref = ref<string | null>(null)
+  const hiddenCalendars = ref<Set<string>>(new Set())
+
+  function toggleCalendar(href: string) {
+    const next = new Set(hiddenCalendars.value)
+    if (next.has(href)) next.delete(href)
+    else next.add(href)
+    hiddenCalendars.value = next
+  }
 
   let client: CalDavClient | null = null
   let lastLoadedUserId = ''
@@ -99,6 +107,12 @@ export function useCalendar() {
     events.value = events.value.map(e => (e.uid === event.uid ? saved : e))
   }
 
+  async function createCalendar(name: string, color: string): Promise<void> {
+    const c = await getClient()
+    const cal = await c.createCalendar(name, color)
+    calendars.value = [...calendars.value, cal]
+  }
+
   async function deleteEvent(event: CalendarEvent): Promise<void> {
     const c = await getClient()
     await c.deleteEvent(event)
@@ -124,10 +138,13 @@ export function useCalendar() {
     calendars,
     events,
     activeCalendarHref,
+    hiddenCalendars,
+    toggleCalendar,
     viewStart,
     viewEnd,
     loadCalendars,
     loadEvents,
+    createCalendar,
     createEvent,
     updateEvent,
     deleteEvent,

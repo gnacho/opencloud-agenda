@@ -7,6 +7,11 @@
         <button class="btn-new-event" @click="openNewEvent()">{{ t('+ New') }}</button>
       </div>
 
+      <div class="calendars-header">
+        <span class="calendars-label">{{ t('Calendars') }}</span>
+        <button class="btn-new-cal" :title="t('New Calendar')" @click="calendarDialogOpen = true">+</button>
+      </div>
+
       <ul class="calendar-list">
         <li
           v-for="cal in calendars"
@@ -14,6 +19,11 @@
           :class="{ active: activeCalendarHref === cal.href }"
           @click="activeCalendarHref = cal.href"
         >
+          <input
+            type="checkbox"
+            :checked="!hiddenCalendars.has(cal.href)"
+            @click.stop="toggleCalendar(cal.href)"
+          />
           <span
             class="cal-dot"
             :style="{ background: cal.color ?? '#0082c9' }"
@@ -36,6 +46,13 @@
         :options="calendarOptions"
       />
     </main>
+
+    <!-- Calendar creation dialog -->
+    <CalendarDialog
+      v-if="calendarDialogOpen"
+      @create="handleCreateCalendar"
+      @close="calendarDialogOpen = false"
+    />
 
     <!-- Event dialog -->
     <EventDialog
@@ -65,6 +82,7 @@ import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
 import deLocale from '@fullcalendar/core/locales/de'
 import EventDialog from '@/components/EventDialog.vue'
+import CalendarDialog from '@/components/CalendarDialog.vue'
 import { useCalendar } from '@/composables/useCalendar'
 import { useI18n } from '@/composables/useI18n'
 import type { CalendarEvent } from '@/services/caldav'
@@ -77,14 +95,29 @@ const {
   calendars,
   events,
   activeCalendarHref,
+  hiddenCalendars,
+  toggleCalendar,
   loadCalendars,
   loadEvents,
+  createCalendar,
   createEvent,
   updateEvent,
   deleteEvent,
 } = useCalendar()
 
-// --- dialog state ---
+// --- calendar dialog state ---
+const calendarDialogOpen = ref(false)
+
+async function handleCreateCalendar(name: string, color: string) {
+  calendarDialogOpen.value = false
+  try {
+    await createCalendar(name, color)
+  } catch (e: unknown) {
+    alert(e instanceof Error ? e.message : String(e))
+  }
+}
+
+// --- event dialog state ---
 const dialogOpen = ref(false)
 const editingEvent = ref<CalendarEvent | null>(null)
 const pendingStart = ref<Date | null>(null)
@@ -108,7 +141,12 @@ function openEditEvent(event: CalendarEvent) {
 
 // --- FullCalendar event mapping ---
 const fcEvents = computed(() =>
-  events.value.map(e => ({
+  events.value
+  .filter(e => {
+    const cal = calendars.value.find(c => e.calendarHref.startsWith(c.href))
+    return cal ? !hiddenCalendars.value.has(cal.href) : true
+  })
+  .map(e => ({
     id: e.uid,
     title: e.title,
     start: e.start,
@@ -304,6 +342,36 @@ watch(calendars, () => {
   font-size: 0.85rem;
 }
 
+.calendars-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.75rem;
+}
+
+.calendars-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--oc-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn-new-cal {
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid var(--oc-color-border, #ccc);
+  background: transparent;
+  color: var(--oc-color-text-default);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.btn-new-cal:hover {
+  background: var(--oc-color-background-default);
+}
+
 .calendar-list {
   list-style: none;
   margin: 0;
@@ -316,7 +384,7 @@ watch(calendars, () => {
 .calendar-list li {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   padding: 0.35rem 0.5rem;
   border-radius: 4px;
   cursor: pointer;
