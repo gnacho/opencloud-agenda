@@ -265,13 +265,12 @@ export class CalDavClient {
     return events
   }
 
-  // PUT: create or update an event; returns the new etag from the server
+  // PUT: create or update an event; returns the new etag from the server.
+  // No If-Match on PUT — Radicale ETag formats can differ between REPORT and PUT,
+  // causing spurious 412s. If-Match is still used on DELETE where it matters most.
   async saveEvent(event: CalendarEvent): Promise<string | undefined> {
     const ics = buildIcs(event)
-    const headers: Record<string, string> = {}
-    if (event.etag) headers['If-Match'] = `"${event.etag}"`
-
-    const res = await this.request('PUT', event.calendarHref, ics, headers)
+    const res = await this.request('PUT', event.calendarHref, ics)
     return res.headers.get('ETag')?.replace(/"/g, '') ?? undefined
   }
 
