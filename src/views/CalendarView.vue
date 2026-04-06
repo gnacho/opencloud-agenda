@@ -163,6 +163,7 @@ const calendarOptions = computed<CalendarOptions>(() => ({
   },
   selectable: true,
   editable: true,
+  eventResizableFromStart: true,
   events: fcEvents.value,
   select(info: DateSelectArg) {
     // FC end is exclusive for all-day selections → shift back one day for the dialog
@@ -462,16 +463,15 @@ watch(calendars, () => {
   margin: 0 auto;
   margin-top: 2px;
 }
+:deep(.fc-daygrid-event .fc-event-resizer-start),
 :deep(.fc-daygrid-event .fc-event-resizer-end) {
   width: 14px;
-  right: 0;
-  top: 0;
-  bottom: 0;
   cursor: ew-resize;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+:deep(.fc-daygrid-event .fc-event-resizer-start::after),
 :deep(.fc-daygrid-event .fc-event-resizer-end::after) {
   width: 4px;
   height: 16px;
