@@ -97,11 +97,21 @@ const defaultCalHref =
     ? props.calendars.find(c => props.event!.calendarHref.startsWith(c.href))?.href ?? props.activeCalendarHref ?? props.calendars[0]?.href ?? ''
     : props.activeCalendarHref ?? props.calendars[0]?.href ?? ''
 
+// For all-day events, iCal DTEND is exclusive (= last day + 1).
+// Show the inclusive last day in the dialog; add 1 day back when saving.
+function allDayEndForDisplay(d: Date): Date {
+  return new Date(d.getTime() - 24 * 60 * 60 * 1000)
+}
+
 const form = reactive({
   title: props.event?.title ?? '',
   allDay: props.event?.allDay ?? props.defaultAllDay ?? false,
   startDate: toLocalDateString(props.event?.start ?? defaultStart),
-  endDate: toLocalDateString(props.event?.end ?? defaultEnd),
+  endDate: toLocalDateString(
+    props.event?.allDay
+      ? allDayEndForDisplay(props.event.end)
+      : (props.event?.end ?? defaultEnd),
+  ),
   startDateTime: toLocalDateTimeString(props.event?.start ?? defaultStart),
   endDateTime: toLocalDateTimeString(props.event?.end ?? defaultEnd),
   location: props.event?.location ?? '',
@@ -111,10 +121,11 @@ const form = reactive({
 
 function parseDates() {
   if (form.allDay) {
-    return {
-      start: new Date(form.startDate + 'T00:00:00'),
-      end: new Date(form.endDate + 'T00:00:00'),
-    }
+    const start = new Date(form.startDate + 'T00:00:00')
+    // Dialog shows inclusive end → add 1 day to make it exclusive (iCal/FC convention)
+    const end = new Date(form.endDate + 'T00:00:00')
+    end.setDate(end.getDate() + 1)
+    return { start, end }
   }
   return {
     start: new Date(form.startDateTime),
