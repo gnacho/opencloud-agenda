@@ -453,7 +453,9 @@ watch(calendars, () => {
 }
 
 /* Resize handles — make them visible especially in dark mode */
-:deep(.fc-event-resizer-end::after) {
+
+/* timeGrid (week/day): bar at bottom of timed events */
+:deep(.fc-timegrid-event .fc-event-resizer-end::after) {
   content: '';
   display: block;
   width: 24px;
@@ -463,6 +465,8 @@ watch(calendars, () => {
   margin: 0 auto;
   margin-top: 2px;
 }
+
+/* dayGrid (month): vertical bars at left and right edges of multi-day events */
 :deep(.fc-daygrid-event .fc-event-resizer-start),
 :deep(.fc-daygrid-event .fc-event-resizer-end) {
   width: 14px;
@@ -473,8 +477,12 @@ watch(calendars, () => {
 }
 :deep(.fc-daygrid-event .fc-event-resizer-start::after),
 :deep(.fc-daygrid-event .fc-event-resizer-end::after) {
+  content: '';
+  display: block;
   width: 4px;
   height: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 2px;
 }
 
 /* Replace icon font (blocked by CSP font-src) with unicode characters */
