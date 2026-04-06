@@ -2,6 +2,7 @@ import ICAL from 'ical.js'
 
 export interface CalendarEvent {
   uid: string
+  seriesUid?: string // original UID of a recurring series (uid is synthetic for occurrences)
   title: string
   start: Date
   end: Date
@@ -51,7 +52,7 @@ function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
     'VERSION:2.0',
     'PRODID:-//opencloud-agenda//EN',
     'BEGIN:VEVENT',
-    `UID:${event.uid}`,
+    `UID:${event.seriesUid ?? event.uid}`,
     `DTSTAMP:${fmt(new Date())}`,
     event.allDay ? `DTSTART;VALUE=DATE:${fmt(event.start)}` : `DTSTART:${fmt(event.start)}`,
     event.allDay ? `DTEND;VALUE=DATE:${fmt(event.end)}` : `DTEND:${fmt(event.end)}`,
@@ -109,6 +110,7 @@ function parseEvents(icsText: string, calendarHref: string, etag?: string): Cale
           const allDay = occurrence.startDate.isDate
           results.push({
             uid: `${ev.uid}_${next.toUnixTime()}`,
+            seriesUid: ev.uid,
             title: ev.summary || '(no title)',
             start: occurrence.startDate.toJSDate(),
             end: occurrence.endDate.toJSDate(),
