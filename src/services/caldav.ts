@@ -65,7 +65,7 @@ function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
   return lines.join('\r\n')
 }
 
-// How far into the future to expand recurring events
+// Expansion window for recurring events (years back and forward from now)
 const EXPAND_YEARS = 2
 
 function parseEvents(icsText: string, calendarHref: string, etag?: string): CalendarEvent[] {
@@ -87,9 +87,13 @@ function parseEvents(icsText: string, calendarHref: string, etag?: string): Cale
       const color = vevent.getFirstPropertyValue('color') as string | undefined
 
       if (ev.isRecurring()) {
-        // Expand recurrences up to EXPAND_YEARS from now
+        const now = Date.now()
+        const rangeStart = ICAL.Time.fromJSDate(
+          new Date(now - EXPAND_YEARS * 365 * 24 * 3600 * 1000),
+          false,
+        )
         const rangeEnd = ICAL.Time.fromJSDate(
-          new Date(Date.now() + EXPAND_YEARS * 365 * 24 * 3600 * 1000),
+          new Date(now + EXPAND_YEARS * 365 * 24 * 3600 * 1000),
           false,
         )
         const iterator = ev.iterator()
@@ -97,6 +101,7 @@ function parseEvents(icsText: string, calendarHref: string, etag?: string): Cale
         let count = 0
         while ((next = iterator.next()) && count < 500) {
           if (next.compare(rangeEnd) > 0) break
+          if (next.compare(rangeStart) < 0) continue
           const occurrence = ev.getOccurrenceDetails(next)
           const allDay = occurrence.startDate.isDate
           results.push({
