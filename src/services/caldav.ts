@@ -265,13 +265,14 @@ export class CalDavClient {
     return events
   }
 
-  // PUT: create or update an event
-  async saveEvent(event: CalendarEvent): Promise<void> {
+  // PUT: create or update an event; returns the new etag from the server
+  async saveEvent(event: CalendarEvent): Promise<string | undefined> {
     const ics = buildIcs(event)
     const headers: Record<string, string> = {}
     if (event.etag) headers['If-Match'] = `"${event.etag}"`
 
-    await this.request('PUT', event.calendarHref, ics, headers)
+    const res = await this.request('PUT', event.calendarHref, ics, headers)
+    return res.headers.get('ETag')?.replace(/"/g, '') ?? undefined
   }
 
   // Build URL for a new event in a given calendar

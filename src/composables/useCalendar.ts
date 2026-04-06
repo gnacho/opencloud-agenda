@@ -72,9 +72,10 @@ export function useCalendar() {
 
   let lastEpoch = 0
 
-  async function saveEvent(event: CalendarEvent): Promise<void> {
+  async function saveEvent(event: CalendarEvent): Promise<CalendarEvent> {
     const c = await getClient()
-    await c.saveEvent(event)
+    const newEtag = await c.saveEvent(event)
+    return { ...event, etag: newEtag ?? event.etag }
   }
 
   async function createEvent(
@@ -87,15 +88,15 @@ export function useCalendar() {
     if (!href) throw new Error('No calendar available')
     const eventHref = c.newEventHref(href, uid)
     const event: CalendarEvent = { ...partial, uid, calendarHref: eventHref }
-    await c.saveEvent(event)
+    const saved = await saveEvent(event)
     // optimistic update
-    events.value = [...events.value, event]
-    return event
+    events.value = [...events.value, saved]
+    return saved
   }
 
   async function updateEvent(event: CalendarEvent): Promise<void> {
-    await saveEvent(event)
-    events.value = events.value.map(e => (e.uid === event.uid ? event : e))
+    const saved = await saveEvent(event)
+    events.value = events.value.map(e => (e.uid === event.uid ? saved : e))
   }
 
   async function deleteEvent(event: CalendarEvent): Promise<void> {
