@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import FullCalendar from '@fullcalendar/vue3'
 import type { CalendarOptions, EventClickArg, DateSelectArg, DatesSetArg, EventDropArg } from '@fullcalendar/core'
 import type { EventResizeDoneArg } from '@fullcalendar/interaction'
@@ -294,11 +294,6 @@ async function handleDelete(event: CalendarEvent) {
     alert(e instanceof Error ? e.message : String(e))
   }
 }
-
-// --- init ---
-onMounted(async () => {
-  await loadCalendars()
-})
 
 // reload events when calendars change
 watch(calendars, () => {

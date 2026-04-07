@@ -122,7 +122,9 @@ export function useCalendar() {
     events.value = events.value.filter(e => e.uid !== event.uid)
   }
 
-  // Re-load when user or token changes
+  // Load on mount and re-load when user or token changes.
+  // immediate:true replaces the onMounted call in CalendarView so there is
+  // exactly one initialisation path and no concurrent getAppToken() calls.
   watch([userId, accessToken], async ([newUser], [oldUser]) => {
     if (newUser !== oldUser) {
       client = null
@@ -133,7 +135,7 @@ export function useCalendar() {
     if (newUser) {
       await loadCalendars()
     }
-  })
+  }, { immediate: true })
 
   return {
     loading,
