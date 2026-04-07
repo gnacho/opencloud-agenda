@@ -30,7 +30,10 @@ export function useCalendar() {
   async function getClient(): Promise<CalDavClient> {
     if (client && lastLoadedUserId === userId.value) return client
 
-    clearAppToken()
+    // Only clear token if the user actually changed (not on initial load)
+    if (lastLoadedUserId && lastLoadedUserId !== userId.value) {
+      clearAppToken()
+    }
     const token = await getAppToken()
     client = new CalDavClient(serverUrl.value, userPathId.value, userId.value, token)
     lastLoadedUserId = userId.value
