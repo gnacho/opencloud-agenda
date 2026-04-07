@@ -39,6 +39,10 @@ function saveToken(userPathId: string, token: string) {
   localStorage.setItem(storageKey(userPathId), JSON.stringify(stored))
 }
 
+// Module-level cache: if a token POST is already in flight, all callers
+// share the same promise instead of each firing a separate request.
+let tokenRequestInFlight: Promise<string> | null = null
+
 export function useAuth() {
   const authStore = useAuthStore()
   const userStore = useUserStore()
@@ -59,19 +63,25 @@ export function useAuth() {
     const cached = loadStoredToken(id)
     if (cached) return cached
 
-    const res = await fetch(`/auth-app/tokens?expiry=${EXPIRY}&label=agenda`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken.value}` },
-    })
+    if (tokenRequestInFlight) return tokenRequestInFlight
 
-    if (!res.ok) throw new Error(`Failed to create app token: ${res.status} ${res.statusText}`)
+    tokenRequestInFlight = (async () => {
+      const res = await fetch(`/auth-app/tokens?expiry=${EXPIRY}&label=agenda`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken.value}` },
+      })
 
-    const data = await res.json()
-    const token: string = data.token
-    if (!token) throw new Error('No app token in response')
+      if (!res.ok) throw new Error(`Failed to create app token: ${res.status} ${res.statusText}`)
 
-    saveToken(id, token)
-    return token
+      const data = await res.json()
+      const token: string = data.token
+      if (!token) throw new Error('No app token in response')
+
+      saveToken(id, token)
+      return token
+    })().finally(() => { tokenRequestInFlight = null })
+
+    return tokenRequestInFlight
   }
 
   function clearAppToken() {
