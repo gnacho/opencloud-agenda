@@ -40,12 +40,32 @@ export function useCalendar() {
     return client
   }
 
+  // Force a fresh token + client (called when the server returns 401,
+  // e.g. after the user manually deleted the token in OpenCloud settings).
+  async function refreshClient(): Promise<CalDavClient> {
+    clearAppToken()
+    client = null
+    lastLoadedUserId = ''
+    return getClient()
+  }
+
+  function is401(e: unknown): boolean {
+    return e instanceof Error && e.message.includes('401')
+  }
+
   async function loadCalendars() {
     loading.value = true
     error.value = null
     try {
-      const c = await getClient()
-      calendars.value = await c.listCalendars()
+      let c = await getClient()
+      try {
+        calendars.value = await c.listCalendars()
+      } catch (e: unknown) {
+        if (!is401(e)) throw e
+        // Token was deleted on the server — get a fresh one and retry once.
+        c = await refreshClient()
+        calendars.value = await c.listCalendars()
+      }
       if (calendars.value.length && !activeCalendarHref.value) {
         activeCalendarHref.value = calendars.value[0].href
       }
