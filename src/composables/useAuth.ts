@@ -15,15 +15,6 @@ function storageKey(userPathId: string): string {
   return `${STORAGE_PREFIX}${userPathId}`
 }
 
-// One-time migration: remove any old tokens left in localStorage.
-;(function migrateLocalStorage() {
-  const toRemove: string[] = []
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-    if (key?.startsWith(STORAGE_PREFIX)) toRemove.push(key)
-  }
-  toRemove.forEach(k => localStorage.removeItem(k))
-})()
 
 function loadStoredToken(userPathId: string): string | null {
   try {
