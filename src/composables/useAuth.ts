@@ -1,9 +1,9 @@
 import { computed } from 'vue'
 import { useAuthStore, useUserStore, useConfigStore } from '@opencloud-eu/web-pkg'
 
-// Token is stored in localStorage keyed by user UUID so it persists across
-// sessions and is not recreated on every page load.
-const EXPIRY = '17520h' // 2 years
+// Token is stored in sessionStorage (tab-scoped, not persisted to disk) keyed
+// by user UUID so it is not recreated on every page load within the same session.
+const EXPIRY = '24h'
 const STORAGE_PREFIX = 'oc-agenda-token:'
 
 interface StoredToken {
@@ -17,11 +17,11 @@ function storageKey(userPathId: string): string {
 
 function loadStoredToken(userPathId: string): string | null {
   try {
-    const raw = localStorage.getItem(storageKey(userPathId))
+    const raw = sessionStorage.getItem(storageKey(userPathId))
     if (!raw) return null
     const stored: StoredToken = JSON.parse(raw)
     if (Date.now() >= stored.expiresAt) {
-      localStorage.removeItem(storageKey(userPathId))
+      sessionStorage.removeItem(storageKey(userPathId))
       return null
     }
     return stored.token
@@ -33,10 +33,9 @@ function loadStoredToken(userPathId: string): string | null {
 function saveToken(userPathId: string, token: string) {
   const stored: StoredToken = {
     token,
-    // 2 years minus 1 day as safety margin
-    expiresAt: Date.now() + (365 * 2 - 1) * 24 * 60 * 60 * 1000,
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 h
   }
-  localStorage.setItem(storageKey(userPathId), JSON.stringify(stored))
+  sessionStorage.setItem(storageKey(userPathId), JSON.stringify(stored))
 }
 
 export function useAuth() {
@@ -75,7 +74,7 @@ export function useAuth() {
   }
 
   function clearAppToken() {
-    localStorage.removeItem(storageKey(userPathId.value))
+    sessionStorage.removeItem(storageKey(userPathId.value))
   }
 
   return { user, userId, userPathId, serverUrl, accessToken, getAppToken, clearAppToken }

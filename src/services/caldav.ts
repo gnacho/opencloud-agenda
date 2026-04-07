@@ -24,6 +24,16 @@ export interface Calendar {
 
 // ---------- helpers ----------
 
+// Escape XML special characters in element text content.
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+}
+
+// Escape iCalendar TEXT values per RFC 5545 §3.3.11.
+function escapeIcs(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
+}
+
 function parseXml(xml: string): Document {
   return new DOMParser().parseFromString(xml, 'application/xml')
 }
@@ -61,10 +71,10 @@ function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
     `DTSTAMP:${fmtUtc(new Date())}`,
     event.allDay ? `DTSTART;VALUE=DATE:${fmtDate(event.start)}` : `DTSTART:${fmtUtc(event.start)}`,
     event.allDay ? `DTEND;VALUE=DATE:${fmtDate(event.end)}` : `DTEND:${fmtUtc(event.end)}`,
-    `SUMMARY:${event.title}`,
+    `SUMMARY:${escapeIcs(event.title)}`,
   ]
-  if (event.description) lines.push(`DESCRIPTION:${event.description.replace(/\n/g, '\\n')}`)
-  if (event.location) lines.push(`LOCATION:${event.location}`)
+  if (event.description) lines.push(`DESCRIPTION:${escapeIcs(event.description)}`)
+  if (event.location) lines.push(`LOCATION:${escapeIcs(event.location)}`)
   if (event.color) lines.push(`COLOR:${event.color}`)
   if (event.rrule) lines.push(`RRULE:${event.rrule}`)
   lines.push('END:VEVENT', 'END:VCALENDAR')
@@ -282,8 +292,8 @@ export class CalDavClient {
 <mkcalendar xmlns="urn:ietf:params:xml:ns:caldav" xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
   <d:set>
     <d:prop>
-      <d:displayname>${name.trim()}</d:displayname>
-      <oc:calendar-color>${color}</oc:calendar-color>
+      <d:displayname>${escapeXml(name.trim())}</d:displayname>
+      <oc:calendar-color>${escapeXml(color)}</oc:calendar-color>
     </d:prop>
   </d:set>
 </mkcalendar>`
