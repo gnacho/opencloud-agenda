@@ -547,7 +547,7 @@ watch(calendars, () => {
     opacity: 0.7;
   }
   :deep(.fc-day-today.fc-daygrid-day) {
-    background: rgba(0, 130, 201, 0.18) !important;
+    background: rgba(0, 130, 201, 0.35) !important;
   }
 }
 
