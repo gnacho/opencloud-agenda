@@ -39,9 +39,9 @@ function saveToken(userPathId: string, token: string) {
   localStorage.setItem(storageKey(userPathId), JSON.stringify(stored))
 }
 
-// Module-level cache: if a token POST is already in flight, all callers
-// share the same promise instead of each firing a separate request.
-let tokenRequestInFlight: Promise<string> | null = null
+// In-flight token requests keyed by userPathId — prevents concurrent POSTs
+// for the same user while allowing independent requests for different users.
+const tokenRequestsInFlight = new Map<string, Promise<string>>()
 
 export function useAuth() {
   const authStore = useAuthStore()
@@ -63,20 +63,22 @@ export function useAuth() {
     const cached = loadStoredToken(id)
     if (cached) return cached
 
-    if (tokenRequestInFlight) return tokenRequestInFlight
+    const inflight = tokenRequestsInFlight.get(id)
+    if (inflight) return inflight
 
-    tokenRequestInFlight = (async () => {
-      // Delete all old agenda tokens from the server before creating a new one.
-      // GET returns [{token, label, ...}] where token is the server-side ID.
+    const promise = (async () => {
+      // Only delete expired agenda tokens — avoids revoking valid tokens
+      // from other tabs or devices running the same app concurrently.
       try {
         const listRes = await fetch('/auth-app/tokens', {
           headers: { Authorization: `Bearer ${accessToken.value}` },
         })
         if (listRes.ok) {
-          const tokens: { token: string; label: string }[] = await listRes.json()
+          const tokens: { token: string; label: string; expiration_date: string }[] = await listRes.json()
+          const now = new Date()
           await Promise.all(
             tokens
-              .filter(t => t.label === 'agenda')
+              .filter(t => t.label === 'agenda' && new Date(t.expiration_date) <= now)
               .map(t => fetch(`/auth-app/tokens?token=${encodeURIComponent(t.token)}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${accessToken.value}` },
@@ -100,9 +102,10 @@ export function useAuth() {
 
       saveToken(id, token)
       return token
-    })().finally(() => { tokenRequestInFlight = null })
+    })().finally(() => { tokenRequestsInFlight.delete(id) })
 
-    return tokenRequestInFlight
+    tokenRequestsInFlight.set(id, promise)
+    return promise
   }
 
   function clearAppToken() {
