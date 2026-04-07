@@ -66,6 +66,27 @@ export function useAuth() {
     if (tokenRequestInFlight) return tokenRequestInFlight
 
     tokenRequestInFlight = (async () => {
+      // Delete all old agenda tokens from the server before creating a new one.
+      // GET returns [{token, label, ...}] where token is the server-side ID.
+      try {
+        const listRes = await fetch('/auth-app/tokens', {
+          headers: { Authorization: `Bearer ${accessToken.value}` },
+        })
+        if (listRes.ok) {
+          const tokens: { token: string; label: string }[] = await listRes.json()
+          await Promise.all(
+            tokens
+              .filter(t => t.label === 'agenda')
+              .map(t => fetch(`/auth-app/tokens?token=${encodeURIComponent(t.token)}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${accessToken.value}` },
+              }))
+          )
+        }
+      } catch {
+        // Cleanup failure is non-fatal — proceed to create a new token.
+      }
+
       const res = await fetch(`/auth-app/tokens?expiry=${EXPIRY}&label=agenda`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken.value}` },
