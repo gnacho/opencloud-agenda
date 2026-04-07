@@ -3,7 +3,7 @@ import { useAuthStore, useUserStore, useConfigStore } from '@opencloud-eu/web-pk
 
 // Token is stored in localStorage keyed by user UUID so it persists across
 // tabs and page reloads and is not recreated unnecessarily.
-const EXPIRY = '24h'
+const EXPIRY = '5m'
 const STORAGE_PREFIX = 'oc-agenda-token:'
 
 interface StoredToken {
@@ -34,7 +34,7 @@ function loadStoredToken(userPathId: string): string | null {
 function saveToken(userPathId: string, token: string) {
   const stored: StoredToken = {
     token,
-    expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 h
+    expiresAt: Date.now() + 5 * 60 * 1000, // 5 min
   }
   localStorage.setItem(storageKey(userPathId), JSON.stringify(stored))
 }
