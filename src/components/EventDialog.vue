@@ -49,6 +49,17 @@
           </select>
         </label>
 
+        <div v-if="form.repeatFreq === 'MONTHLY'" class="repeat-monthly">
+          <label class="row">
+            <input type="radio" v-model="form.monthlyType" value="DAYOFMONTH" />
+            {{ t('On day') }} {{ autoMonthDay }}
+          </label>
+          <label class="row">
+            <input type="radio" v-model="form.monthlyType" value="NTHWEEKDAY" />
+            {{ t('On the') }} {{ autoNthWeekdayLabel }}
+          </label>
+        </div>
+
         <div v-if="form.repeatFreq === 'WEEKLY'" class="repeat-days">
           <label v-for="(label, day) in weekDayLabels" :key="day" class="day-label">
             <input type="checkbox" :value="day" v-model="form.repeatDays" />
@@ -127,14 +138,40 @@ const weekDayLabels: Record<string, string> = {
   FR: t('Fr'), SA: t('Sa'), SU: t('Su'),
 }
 
+const DAY_NAMES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
+const DAY_LABELS: Record<string, string> = {
+  SU: t('Sun'), MO: t('Mon'), TU: t('Tue'), WE: t('Wed'),
+  TH: t('Thu'), FR: t('Fri'), SA: t('Sat'),
+}
+const ORDINALS = [t('1st'), t('2nd'), t('3rd'), t('4th')]
+
+function getNthWeekday(date: Date): string {
+  const day = DAY_NAMES[date.getDay()]
+  const n = Math.ceil(date.getDate() / 7) // 1–4
+  return `${n}${day}`
+}
+
+function nthWeekdayLabel(byday: string): string {
+  const m = byday.match(/^(-?\d+)([A-Z]{2})$/)
+  if (!m) return byday
+  const n = parseInt(m[1])
+  const day = DAY_LABELS[m[2]] ?? m[2]
+  const ord = n === -1 ? t('Last') : (ORDINALS[n - 1] ?? `${n}.`)
+  return `${ord} ${day}`
+}
+
 function parseRrule(rrule: string) {
   const freq = (rrule.match(/FREQ=(\w+)/)?.[1] ?? 'NONE') as RepeatFreq
-  const days = rrule.match(/BYDAY=([^;]+)/)?.[1]?.split(',') ?? []
+  const bydayRaw = rrule.match(/BYDAY=([^;]+)/)?.[1] ?? ''
+  const isNthWeekday = freq === 'MONTHLY' && /^-?\d+[A-Z]{2}$/.test(bydayRaw)
+  const days = !isNthWeekday && bydayRaw ? bydayRaw.split(',') : []
   const count = rrule.match(/COUNT=(\d+)/)?.[1]
   const until = rrule.match(/UNTIL=(\d{8})/)?.[1]
   return {
     freq,
     days,
+    monthlyType: isNthWeekday ? 'NTHWEEKDAY' : 'DAYOFMONTH',
+    monthlyByday: isNthWeekday ? bydayRaw : '',
     endType: count ? 'COUNT' : until ? 'UNTIL' : 'NEVER' as RepeatEnd,
     count: count ? parseInt(count) : 10,
     until: until ? `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}` : '',
@@ -180,19 +217,29 @@ const form = reactive({
   calendarHref: defaultCalHref,
   repeatFreq: (parsedRrule?.freq ?? 'NONE') as RepeatFreq,
   repeatDays: parsedRrule?.days ?? [] as string[],
+  monthlyType: (parsedRrule?.monthlyType ?? 'DAYOFMONTH') as 'DAYOFMONTH' | 'NTHWEEKDAY',
   repeatEndType: (parsedRrule?.endType ?? 'NEVER') as RepeatEnd,
   repeatCount: parsedRrule?.count ?? 10,
   repeatUntil: parsedRrule?.until ?? '',
 })
 
+// Auto-compute Nth weekday from start date (used as default for monthly NTHWEEKDAY)
+const startDateForCalc = computed(() =>
+  new Date(form.allDay ? form.startDate + 'T00:00:00' : form.startDateTime)
+)
+const autoNthWeekday = computed(() => getNthWeekday(startDateForCalc.value))
+const autoNthWeekdayLabel = computed(() => nthWeekdayLabel(autoNthWeekday.value))
+const autoMonthDay = computed(() => startDateForCalc.value.getDate())
+
 function buildRrule(): string | undefined {
   if (form.repeatFreq === 'NONE') return undefined
   let rule = `FREQ=${form.repeatFreq}`
   if (form.repeatFreq === 'WEEKLY') {
-    const days = form.repeatDays.length
-      ? form.repeatDays
-      : [['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][new Date(form.startDate || form.startDateTime).getDay()]]
+    const days = form.repeatDays.length ? form.repeatDays : [DAY_NAMES[startDateForCalc.value.getDay()]]
     rule += `;BYDAY=${days.join(',')}`
+  }
+  if (form.repeatFreq === 'MONTHLY' && form.monthlyType === 'NTHWEEKDAY') {
+    rule += `;BYDAY=${autoNthWeekday.value}`
   }
   if (form.repeatEndType === 'COUNT' && form.repeatCount > 0) {
     rule += `;COUNT=${form.repeatCount}`
@@ -442,6 +489,12 @@ button.danger:hover {
   color: var(--oc-color-swatch-danger-default, #e9322d);
   font-size: 0.85rem;
   margin: 0;
+}
+
+.repeat-monthly {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
 .repeat-days {
