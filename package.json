@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.15",
@@ -28,6 +28,7 @@
   "devDependencies": {
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-vue": "^6.0.5",
+    "happy-dom": "^20.8.9",
     "typescript": "^5.7.3",
     "vite": "^8.0.4",
     "vitest": "^3.1.1",
