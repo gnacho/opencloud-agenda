@@ -188,8 +188,12 @@ export function useCalendar() {
   async function deleteOccurrence(event: CalendarEvent): Promise<void> {
     const c = await getClient()
     await c.deleteOccurrence(event.calendarHref, event.start, event.allDay)
-    // Remove only this specific occurrence from local state
-    events.value = events.value.filter(e => e.uid !== event.uid)
+    // Remove this occurrence; clear ETags on remaining series occurrences
+    // because the master ICS was modified (EXDATE added) and the ETag changed.
+    // Without this, a subsequent "Delete series" would send a stale If-Match → 412.
+    events.value = events.value
+      .filter(e => e.uid !== event.uid)
+      .map(e => e.seriesUid === event.seriesUid ? { ...e, etag: undefined } : e)
   }
 
   // Load on mount and re-load when user or token changes.
