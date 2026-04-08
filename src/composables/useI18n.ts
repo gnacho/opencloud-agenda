@@ -63,6 +63,8 @@ const translations: Record<string, string> = {
   'End must be after start.': 'Ende muss nach dem Beginn liegen.',
   'Please select a calendar.': 'Bitte einen Kalender auswählen.',
   'Moving recurring events between calendars is not supported.': 'Serien-Termine können nicht zwischen Kalendern verschoben werden.',
+  'Delete occurrence': 'Diesen Termin löschen',
+  'Delete series': 'Serie löschen',
 }
 
 function isGerman(): boolean {

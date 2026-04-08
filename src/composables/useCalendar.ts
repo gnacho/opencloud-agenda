@@ -177,6 +177,18 @@ export function useCalendar() {
   async function deleteEvent(event: CalendarEvent): Promise<void> {
     const c = await getClient()
     await c.deleteEvent(event)
+    if (event.seriesUid) {
+      // Deletes the master ICS — remove all occurrences of this series
+      events.value = events.value.filter(e => e.seriesUid !== event.seriesUid)
+    } else {
+      events.value = events.value.filter(e => e.uid !== event.uid)
+    }
+  }
+
+  async function deleteOccurrence(event: CalendarEvent): Promise<void> {
+    const c = await getClient()
+    await c.deleteOccurrence(event.calendarHref, event.start, event.allDay)
+    // Remove only this specific occurrence from local state
     events.value = events.value.filter(e => e.uid !== event.uid)
   }
 
@@ -211,6 +223,7 @@ export function useCalendar() {
     createEvent,
     updateEvent,
     deleteEvent,
+    deleteOccurrence,
     renameCalendar,
   }
 }

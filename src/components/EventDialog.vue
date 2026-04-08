@@ -94,7 +94,10 @@
       </label>
 
       <div class="actions">
-        <button v-if="!isNew" class="danger" @click="handleDelete">{{ t('Delete') }}</button>
+        <template v-if="!isNew">
+          <button v-if="event?.seriesUid" class="danger" @click="handleDeleteOccurrence">{{ t('Delete occurrence') }}</button>
+          <button class="danger" @click="handleDelete">{{ event?.seriesUid ? t('Delete series') : t('Delete') }}</button>
+        </template>
         <span class="spacer" />
         <button @click="$emit('close')">{{ t('Cancel') }}</button>
         <button class="primary" @click="handleSave">{{ t('Save') }}</button>
@@ -125,6 +128,7 @@ const emit = defineEmits<{
   (e: 'save', event: Omit<CalendarEvent, 'uid' | 'calendarHref' | 'etag'> & { calendarHref: string }): void
   (e: 'update', event: CalendarEvent): void
   (e: 'delete', event: CalendarEvent): void
+  (e: 'delete-occurrence', event: CalendarEvent): void
   (e: 'close'): void
 }>()
 
@@ -314,6 +318,10 @@ function handleSave() {
 
 function handleDelete() {
   if (props.event) emit('delete', props.event)
+}
+
+function handleDeleteOccurrence() {
+  if (props.event) emit('delete-occurrence', props.event)
 }
 </script>
 

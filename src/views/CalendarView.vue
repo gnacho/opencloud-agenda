@@ -88,6 +88,7 @@
       @save="handleCreate"
       @update="handleUpdate"
       @delete="handleDelete"
+      @delete-occurrence="handleDeleteOccurrence"
       @close="dialogOpen = false"
     />
   </div>
@@ -129,6 +130,7 @@ const {
   createEvent,
   updateEvent,
   deleteEvent,
+  deleteOccurrence,
 } = useCalendar()
 
 // --- calendar rename state ---
@@ -320,6 +322,10 @@ async function handleCreate(
   dialogOpen.value = false
   try {
     await createEvent(partial, partial.calendarHref)
+    if (partial.rrule) {
+      // Optimistic update only adds one object — reload to get all expanded occurrences
+      loadEvents(currentRange.start, currentRange.end)
+    }
   } catch (e: unknown) {
     alert(e instanceof Error ? e.message : String(e))
   }
@@ -338,6 +344,15 @@ async function handleDelete(event: CalendarEvent) {
   dialogOpen.value = false
   try {
     await deleteEvent(event)
+  } catch (e: unknown) {
+    alert(e instanceof Error ? e.message : String(e))
+  }
+}
+
+async function handleDeleteOccurrence(event: CalendarEvent) {
+  dialogOpen.value = false
+  try {
+    await deleteOccurrence(event)
   } catch (e: unknown) {
     alert(e instanceof Error ? e.message : String(e))
   }

@@ -387,10 +387,43 @@ export class CalDavClient {
     return `${calendarHref.replace(/\/$/, '')}/${uid}.ics`
   }
 
-  // DELETE: remove an event
+  // DELETE: remove an event (or entire recurring series)
   async deleteEvent(event: CalendarEvent): Promise<void> {
     const headers: Record<string, string> = {}
     if (event.etag) headers['If-Match'] = `"${event.etag}"`
     await this.request('DELETE', event.calendarHref, undefined, headers)
+  }
+
+  // Add EXDATE to master ICS to exclude a single occurrence without touching the rest of the series.
+  async deleteOccurrence(href: string, occurrenceStart: Date, allDay: boolean): Promise<void> {
+    const getRes = await this.request('GET', href)
+    const icsText = await getRes.text()
+
+    let jcal: unknown
+    try {
+      jcal = ICAL.parse(icsText)
+    } catch {
+      throw new Error('Failed to parse existing calendar data')
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const comp = new ICAL.Component(jcal as any)
+    const vevent = comp.getFirstSubcomponent('vevent')
+    if (!vevent) throw new Error('No VEVENT found in calendar data')
+
+    let exdate: ICAL.Time
+    if (allDay) {
+      const y = occurrenceStart.getFullYear()
+      const m = String(occurrenceStart.getMonth() + 1).padStart(2, '0')
+      const d = String(occurrenceStart.getDate()).padStart(2, '0')
+      exdate = ICAL.Time.fromDateString(`${y}-${m}-${d}`)
+    } else {
+      exdate = ICAL.Time.fromJSDate(occurrenceStart, true)
+    }
+
+    vevent.addPropertyWithValue('exdate', exdate)
+
+    const modifiedIcs = comp.toString()
+    await this.request('PUT', href, modifiedIcs)
   }
 }
