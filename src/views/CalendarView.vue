@@ -28,7 +28,21 @@
             class="cal-dot"
             :style="{ background: cal.color ?? '#0082c9' }"
           />
-          {{ cal.displayName }}
+          <input
+            v-if="renamingHref === cal.href"
+            class="cal-rename-input"
+            v-model="renameValue"
+            @keydown.enter.stop="commitRename(cal.href)"
+            @keydown.escape.stop="renamingHref = null"
+            @blur="commitRename(cal.href)"
+            @click.stop
+            ref="renameInputRef"
+          />
+          <span
+            v-else
+            class="cal-name"
+            @dblclick.stop="startRename(cal)"
+          >{{ cal.displayName }}</span>
         </li>
       </ul>
 
@@ -79,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import FullCalendar from '@fullcalendar/vue3'
 import type { CalendarOptions, EventClickArg, DateSelectArg, DatesSetArg, EventDropArg } from '@fullcalendar/core'
 import type { EventResizeDoneArg } from '@fullcalendar/interaction'
@@ -110,10 +124,34 @@ const {
   loadCalendars,
   loadEvents,
   createCalendar,
+  renameCalendar,
   createEvent,
   updateEvent,
   deleteEvent,
 } = useCalendar()
+
+// --- calendar rename state ---
+const renamingHref = ref<string | null>(null)
+const renameValue = ref('')
+const renameInputRef = ref<HTMLInputElement | null>(null)
+
+function startRename(cal: { href: string; displayName: string }) {
+  renamingHref.value = cal.href
+  renameValue.value = cal.displayName
+  nextTick(() => renameInputRef.value?.select())
+}
+
+async function commitRename(href: string) {
+  if (renamingHref.value !== href) return
+  renamingHref.value = null
+  const name = renameValue.value.trim()
+  if (!name) return
+  try {
+    await renameCalendar(href, name)
+  } catch (e: unknown) {
+    alert(e instanceof Error ? e.message : String(e))
+  }
+}
 
 // --- calendar dialog state ---
 const calendarDialogOpen = ref(false)
@@ -407,6 +445,25 @@ watch(calendars, () => {
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.cal-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-rename-input {
+  flex: 1;
+  font-size: 0.9rem;
+  padding: 0 2px;
+  border: 1px solid var(--oc-color-swatch-brand-default);
+  border-radius: 3px;
+  background: var(--oc-color-background-default);
+  color: var(--oc-color-text-default);
+  outline: none;
+  min-width: 0;
 }
 
 /* ---- Main area ---- */

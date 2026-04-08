@@ -136,6 +136,14 @@ export function useCalendar() {
     calendars.value = [...calendars.value, cal]
   }
 
+  async function renameCalendar(href: string, newName: string): Promise<void> {
+    const c = await getClient()
+    await c.renameCalendar(href, newName)
+    calendars.value = calendars.value.map(cal =>
+      cal.href === href ? { ...cal, displayName: newName.trim() } : cal
+    )
+  }
+
   async function deleteEvent(event: CalendarEvent): Promise<void> {
     const c = await getClient()
     await c.deleteEvent(event)
@@ -173,5 +181,6 @@ export function useCalendar() {
     createEvent,
     updateEvent,
     deleteEvent,
+    renameCalendar,
   }
 }

@@ -301,6 +301,19 @@ export class CalDavClient {
     return { href, displayName: name.trim(), color }
   }
 
+  // PROPPATCH: rename a calendar collection
+  async renameCalendar(href: string, newName: string): Promise<void> {
+    const body = `<?xml version="1.0" encoding="utf-8"?>
+<d:propertyupdate xmlns:d="DAV:">
+  <d:set>
+    <d:prop>
+      <d:displayname>${escapeXml(newName.trim())}</d:displayname>
+    </d:prop>
+  </d:set>
+</d:propertyupdate>`
+    await this.request('PROPPATCH', href, body, { 'Content-Type': 'application/xml; charset=utf-8' })
+  }
+
   // Build URL for a new event in a given calendar
   newEventHref(calendarHref: string, uid: string): string {
     return `${calendarHref.replace(/\/$/, '')}/${uid}.ics`
