@@ -137,12 +137,16 @@ export function useCalendar() {
         e.uid === event.uid ? { ...event, etag: newEtag ?? event.etag } : e
       )
     } else if (event.seriesUid) {
-      // Recurring event occurrence — patch the original ICS to preserve RRULE.
+      // Recurring event occurrence — patch the master ICS, preserving properties we don't touch.
       const c = await getClient()
       const newEtag = await c.patchRecurringEvent(event.calendarHref, {
         title: event.title,
         description: event.description,
         location: event.location,
+        start: event.start,
+        end: event.end,
+        allDay: event.allDay,
+        rrule: event.rrule,
       })
       // Update all occurrences of this series in local state.
       events.value = events.value.map(e =>

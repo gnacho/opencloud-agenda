@@ -4,6 +4,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <span class="sidebar-title">{{ t('Agenda') }}</span>
+        <button class="btn-reload" :class="{ spinning: loading }" :title="t('Refresh')" @click="reload">↻</button>
         <button class="btn-new-event" @click="openNewEvent()">{{ t('+ New') }}</button>
       </div>
 
@@ -233,6 +234,11 @@ function onDatesSet(info: DatesSetArg) {
   loadEvents(info.start, info.end)
 }
 
+async function reload() {
+  await loadCalendars()
+  loadEvents(currentRange.start, currentRange.end)
+}
+
 const fcRef = ref<InstanceType<typeof FullCalendar> | null>(null)
 
 const calendarOptions = computed<CalendarOptions>(() => ({
@@ -291,6 +297,10 @@ const calendarOptions = computed<CalendarOptions>(() => ({
       info.revert()
       alert(e instanceof Error ? e.message : String(e))
     }
+  },
+  eventClassNames(arg) {
+    const ev = arg.event.extendedProps.event as CalendarEvent
+    return (ev.seriesUid || ev.rrule) ? ['fc-event-recurring'] : []
   },
   datesSet: onDatesSet,
   height: '100%',
@@ -373,6 +383,25 @@ watch(calendars, () => {
   color: var(--oc-color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.btn-reload {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--oc-color-text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.btn-reload:hover {
+  background: var(--oc-color-background-default);
+}
+
+.btn-reload.spinning {
+  animation: spin 0.7s linear infinite;
 }
 
 .btn-new-event {
@@ -601,6 +630,14 @@ watch(calendars, () => {
   :deep(.fc-day-today.fc-daygrid-day) {
     background: rgba(0, 130, 201, 0.35) !important;
   }
+}
+
+/* Recurring event indicator */
+:deep(.fc-event-recurring .fc-event-title::after),
+:deep(.fc-event-recurring .fc-list-event-title::after) {
+  content: ' ↻';
+  font-size: 0.8em;
+  opacity: 0.75;
 }
 
 /* Resize handles — make them visible especially in dark mode */

@@ -16,6 +16,8 @@
           <li v-else>In week/day view: click a time slot → timed event at that hour</li>
           <li v-if="de">„+ Neu"-Button oben links → Termin ohne Vorgabe erstellen</li>
           <li v-else>"+ New" button top left → create event without preselection</li>
+          <li v-if="de">Im Dialog unter „Wiederholen" lässt sich eine Wiederholungsregel festlegen (täglich, wöchentlich, monatlich, jährlich)</li>
+          <li v-else>Use "Repeat" in the dialog to set a recurrence rule (daily, weekly, monthly, yearly)</li>
         </ul>
       </section>
 
@@ -30,6 +32,24 @@
           <li v-else>Multi-day events have white handles at both edges to extend or shorten them</li>
           <li v-if="de">In der Wochen-/Tagesansicht: unterer Rand eines Termins ziehen → Dauer ändern</li>
           <li v-else>In week/day view: drag the bottom edge of a timed event → change duration</li>
+          <li v-if="de">Im Kalender-Dropdown den Kalender wechseln → verschiebt den Termin in einen anderen Kalender</li>
+          <li v-else>Change the calendar in the dropdown → moves the event to a different calendar</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>{{ de ? 'Wiederkehrende Termine' : 'Recurring events' }}</h2>
+        <ul>
+          <li v-if="de">Wiederkehrende Termine sind im Kalender mit <strong>↻</strong> markiert</li>
+          <li v-else>Recurring events are marked with <strong>↻</strong> in the calendar</li>
+          <li v-if="de">Wiederholungsoptionen: täglich · wöchentlich (Wochentage wählbar) · monatlich (am Tag X oder am N-ten Wochentag) · jährlich</li>
+          <li v-else>Repeat options: daily · weekly (choose weekdays) · monthly (on day X or the Nth weekday) · yearly</li>
+          <li v-if="de">Ende der Serie: nie · nach N Terminen · bis zu einem Datum</li>
+          <li v-else>Series end: never · after N occurrences · until a date</li>
+          <li v-if="de">Beim Bearbeiten oder Verschieben eines Serientermins wird immer die <em>gesamte Serie</em> aktualisiert</li>
+          <li v-else>Editing or moving a recurring event always updates the <em>entire series</em></li>
+          <li v-if="de">Termine aus Thunderbird oder anderen CalDAV-Clients werden korrekt als Serie angezeigt und können hier bearbeitet werden</li>
+          <li v-else>Events from Thunderbird or other CalDAV clients are correctly shown as a series and can be edited here</li>
         </ul>
       </section>
 
@@ -40,8 +60,12 @@
           <li v-else>Checkbox in the sidebar → show/hide a calendar</li>
           <li v-if="de">Klick auf einen Kalendernamen → wählt ihn als Standard für neue Termine</li>
           <li v-else>Click a calendar name → sets it as default for new events</li>
+          <li v-if="de">Doppelklick auf einen Kalendernamen → umbenennen</li>
+          <li v-else>Double-click a calendar name → rename it</li>
           <li v-if="de">„+"-Button neben „Kalender" → neuen Kalender anlegen (Name + Farbe)</li>
           <li v-else>"+" button next to "Calendars" → create a new calendar (name + color)</li>
+          <li v-if="de">↻-Button in der Sidebar → Daten manuell vom Server laden (z. B. nach Sync mit Thunderbird)</li>
+          <li v-else>↻ button in the sidebar → manually refresh data from the server (e.g. after syncing with Thunderbird)</li>
         </ul>
       </section>
 
@@ -62,12 +86,12 @@
       <section>
         <h2>{{ de ? 'Hinweise' : 'Notes' }}</h2>
         <ul>
-          <li v-if="de">Wiederkehrende Termine werden lokal expandiert (±2 Jahre). Beim Verschieben oder Ändern wird die <em>gesamte Serie</em> aktualisiert.</li>
-          <li v-else>Recurring events are expanded locally (±2 years). Moving or editing updates the <em>entire series</em>.</li>
           <li v-if="de">Ganztägige Termine: das Enddatum im Dialog ist <em>inklusive</em> — „Ende: 21.04" heißt der Termin läuft bis einschließlich 21.04.</li>
           <li v-else>All-day events: the end date in the dialog is <em>inclusive</em> — "End: Apr 21" means the event runs through Apr 21.</li>
           <li v-if="de">Daten werden direkt im CalDAV-Server (Radicale) gespeichert und sind sofort in anderen Clients (Thunderbird, Smartphone) sichtbar.</li>
           <li v-else>Data is stored directly on the CalDAV server (Radicale) and immediately visible in other clients (Thunderbird, phone).</li>
+          <li v-if="de">Das Verschieben von Serienterminen zwischen Kalendern wird nicht unterstützt.</li>
+          <li v-else>Moving recurring events between calendars is not supported.</li>
         </ul>
       </section>
 

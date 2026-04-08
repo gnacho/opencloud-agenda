@@ -106,12 +106,13 @@ function parseEvents(icsText: string, calendarHref: string, etag?: string): Cale
         const now = Date.now()
         const rangeStart = ICAL.Time.fromJSDate(
           new Date(now - EXPAND_YEARS * 365 * 24 * 3600 * 1000),
-          false,
+          true,
         )
         const rangeEnd = ICAL.Time.fromJSDate(
           new Date(now + EXPAND_YEARS * 365 * 24 * 3600 * 1000),
-          false,
+          true,
         )
+        const rruleStr = vevent.getFirstProperty('rrule')?.getFirstValue()?.toString() ?? undefined
         const iterator = ev.iterator()
         let next: ICAL.Time | null
         let inRange = 0
@@ -133,6 +134,7 @@ function parseEvents(icsText: string, calendarHref: string, etag?: string): Cale
             description: ev.description || undefined,
             location: ev.location || undefined,
             color,
+            rrule: rruleStr,
             calendarHref,
             etag,
           })
@@ -301,11 +303,19 @@ export class CalDavClient {
     return { href, displayName: name.trim(), color }
   }
 
-  // GET + patch text fields + PUT back — preserves RRULE and all other properties.
-  // Used when editing a recurring event so we never lose the recurrence rule.
+  // GET + patch fields + PUT back — preserves properties we don't explicitly overwrite.
+  // Used when editing a recurring event series.
   async patchRecurringEvent(
     href: string,
-    fields: { title: string; description?: string; location?: string },
+    fields: {
+      title: string
+      description?: string
+      location?: string
+      start?: Date
+      end?: Date
+      allDay?: boolean
+      rrule?: string
+    },
   ): Promise<string | undefined> {
     const getRes = await this.request('GET', href)
     const icsText = await getRes.text()
@@ -334,6 +344,24 @@ export class CalDavClient {
       vevent.updatePropertyWithValue('location', fields.location)
     } else {
       vevent.removeProperty('location')
+    }
+
+    if (fields.start !== undefined && fields.end !== undefined) {
+      if (fields.allDay) {
+        const fmtDate = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        vevent.updatePropertyWithValue('dtstart', ICAL.Time.fromDateString(fmtDate(fields.start)))
+        vevent.updatePropertyWithValue('dtend', ICAL.Time.fromDateString(fmtDate(fields.end)))
+      } else {
+        vevent.updatePropertyWithValue('dtstart', ICAL.Time.fromJSDate(fields.start, true))
+        vevent.updatePropertyWithValue('dtend', ICAL.Time.fromJSDate(fields.end, true))
+      }
+    }
+
+    if (fields.rrule) {
+      vevent.updatePropertyWithValue('rrule', ICAL.Recur.fromString(fields.rrule))
+    } else if (fields.rrule === undefined || fields.rrule === '') {
+      vevent.removeProperty('rrule')
     }
 
     const modifiedIcs = comp.toString()

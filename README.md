@@ -5,11 +5,15 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 ## Features
 
 - **Month, week, day and list views** powered by [FullCalendar](https://fullcalendar.io/)
-- **Create, edit and delete events** via a clean dialog
-- **Recurring events** — full RRULE expansion via ical.js
+- **Create, edit and delete events** via a clean dialog — including drag & drop and resize
+- **Recurring events** — create and edit series with full RRULE support (daily, weekly, monthly by day or Nth weekday, yearly; end by count or date); recurring events are marked with ↻
+- **CalDAV sync** — compatible with Thunderbird, DAVx⁵ and other CalDAV clients; Thunderbird-created recurring events are correctly expanded and editable
+- **Calendar management** — create calendars with custom colors, rename by double-click, show/hide per calendar
+- **Move events between calendars** — change the calendar in the edit dialog
+- **Manual refresh** — ↻ button in the sidebar reloads all data from the server on demand
 - **Bilingual UI** — English and German, based on the browser/OpenCloud language setting
 - **Dark mode support** — follows the OpenCloud theme
-- **CalDAV backend** — connects to the Radicale CalDAV server bundled with OpenCloud
+- **Secure token management** — app tokens are cached in `localStorage` (24 h TTL), deduplicated across tabs, and refreshed automatically on expiry
 
 ## Requirements
 
@@ -76,9 +80,11 @@ Refer to the [OpenCloud web-app-skeleton](https://github.com/opencloud-eu/web-ap
 ## Architecture notes
 
 - Authentication uses the OpenCloud app token endpoint (`POST /auth-app/tokens`) with the OIDC Bearer token, then Basic Auth for CalDAV requests — identical to the contacts app pattern.
+- App tokens are stored in `localStorage` keyed by user UUID (24 h TTL). Concurrent tab requests are deduplicated via a module-level in-flight promise map. A 401 response triggers an automatic token refresh.
 - The Radicale CalDAV path uses the **user UUID** (not the username), as set by the OpenCloud proxy via `X-Remote-User`.
 - FullCalendar icon fonts are replaced with Unicode characters to comply with the OpenCloud Content Security Policy (`font-src 'self'` — no `data:` URIs allowed).
-- Recurring events are expanded client-side by ical.js (up to 2 years ahead).
+- Recurring events are expanded client-side by ical.js (±2 years). Editing a recurring event uses GET → patch → PUT to preserve the RRULE and all other ICS properties.
+- All ICS text values are RFC 5545-escaped; CalDAV XML payloads use proper XML entity escaping.
 
 ## License
 

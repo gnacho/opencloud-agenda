@@ -36,53 +36,53 @@
         <textarea v-model="form.description" rows="3" :placeholder="t('Description')" />
       </label>
 
-      <!-- Repeat — hidden for recurring occurrences (seriesUid set) -->
-      <template v-if="!event?.seriesUid">
+      <!-- Repeat — always editable; note shown when editing a recurring series -->
+      <p v-if="event?.seriesUid" class="series-note">{{ t('Edits apply to the full series.') }}</p>
+
+      <label>
+        {{ t('Repeat') }}
+        <select v-model="form.repeatFreq">
+          <option value="NONE">{{ t('None') }}</option>
+          <option value="DAILY">{{ t('Daily') }}</option>
+          <option value="WEEKLY">{{ t('Weekly') }}</option>
+          <option value="MONTHLY">{{ t('Monthly') }}</option>
+          <option value="YEARLY">{{ t('Yearly') }}</option>
+        </select>
+      </label>
+
+      <div v-if="form.repeatFreq === 'MONTHLY'" class="repeat-monthly">
+        <label class="row">
+          <input type="radio" v-model="form.monthlyType" value="DAYOFMONTH" />
+          {{ t('On day') }} {{ autoMonthDay }}
+        </label>
+        <label class="row">
+          <input type="radio" v-model="form.monthlyType" value="NTHWEEKDAY" />
+          {{ t('On the') }} {{ autoNthWeekdayLabel }}
+        </label>
+      </div>
+
+      <div v-if="form.repeatFreq === 'WEEKLY'" class="repeat-days">
+        <label v-for="(label, day) in weekDayLabels" :key="day" class="day-label">
+          <input type="checkbox" :value="day" v-model="form.repeatDays" />
+          {{ label }}
+        </label>
+      </div>
+
+      <div v-if="form.repeatFreq !== 'NONE'" class="repeat-end">
         <label>
-          {{ t('Repeat') }}
-          <select v-model="form.repeatFreq">
-            <option value="NONE">{{ t('None') }}</option>
-            <option value="DAILY">{{ t('Daily') }}</option>
-            <option value="WEEKLY">{{ t('Weekly') }}</option>
-            <option value="MONTHLY">{{ t('Monthly') }}</option>
-            <option value="YEARLY">{{ t('Yearly') }}</option>
+          {{ t('End') }}
+          <select v-model="form.repeatEndType">
+            <option value="NEVER">{{ t('Never') }}</option>
+            <option value="COUNT">{{ t('After') }}</option>
+            <option value="UNTIL">{{ t('Until') }}</option>
           </select>
         </label>
-
-        <div v-if="form.repeatFreq === 'MONTHLY'" class="repeat-monthly">
-          <label class="row">
-            <input type="radio" v-model="form.monthlyType" value="DAYOFMONTH" />
-            {{ t('On day') }} {{ autoMonthDay }}
-          </label>
-          <label class="row">
-            <input type="radio" v-model="form.monthlyType" value="NTHWEEKDAY" />
-            {{ t('On the') }} {{ autoNthWeekdayLabel }}
-          </label>
-        </div>
-
-        <div v-if="form.repeatFreq === 'WEEKLY'" class="repeat-days">
-          <label v-for="(label, day) in weekDayLabels" :key="day" class="day-label">
-            <input type="checkbox" :value="day" v-model="form.repeatDays" />
-            {{ label }}
-          </label>
-        </div>
-
-        <div v-if="form.repeatFreq !== 'NONE'" class="repeat-end">
-          <label>
-            {{ t('End') }}
-            <select v-model="form.repeatEndType">
-              <option value="NEVER">{{ t('Never') }}</option>
-              <option value="COUNT">{{ t('After') }}</option>
-              <option value="UNTIL">{{ t('Until') }}</option>
-            </select>
-          </label>
-          <label v-if="form.repeatEndType === 'COUNT'" class="row">
-            <input type="number" v-model.number="form.repeatCount" min="1" max="999" class="count-input" />
-            {{ t('times') }}
-          </label>
-          <input v-if="form.repeatEndType === 'UNTIL'" type="date" v-model="form.repeatUntil" />
-        </div>
-      </template>
+        <label v-if="form.repeatEndType === 'COUNT'" class="row">
+          <input type="number" v-model.number="form.repeatCount" min="1" max="999" class="count-input" />
+          {{ t('times') }}
+        </label>
+        <input v-if="form.repeatEndType === 'UNTIL'" type="date" v-model="form.repeatUntil" />
+      </div>
 
       <label>
         {{ t('Calendar') }}
@@ -177,6 +177,7 @@ function parseRrule(rrule: string) {
     until: until ? `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}` : '',
   }
 }
+
 const saveError = ref<string | null>(null)
 
 function toLocalDateString(d: Date) {
@@ -306,7 +307,7 @@ function handleSave() {
       location: form.location || undefined,
       description: form.description || undefined,
       calendarHref: newCalendarHref,
-      rrule: props.event!.seriesUid ? props.event!.rrule : buildRrule(),
+      rrule: buildRrule(),
     })
   }
 }
@@ -510,7 +511,7 @@ button.danger:hover {
   gap: 0.2rem;
   font-size: 0.85rem;
   font-weight: normal;
-  color: var(--oc-color-text-default, #1a1a1a);
+  color: inherit;
   cursor: pointer;
 }
 
@@ -529,6 +530,13 @@ button.danger:hover {
 
 .count-input {
   width: 4.5rem;
+}
+
+.series-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--oc-color-text-muted, #888);
+  font-style: italic;
 }
 
 .event-dialog {
