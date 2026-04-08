@@ -25,12 +25,12 @@ export interface Calendar {
 // ---------- helpers ----------
 
 // Escape XML special characters in element text content.
-function escapeXml(s: string): string {
+export function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
 }
 
 // Escape iCalendar TEXT values per RFC 5545 §3.3.11.
-function escapeIcs(s: string): string {
+export function escapeIcs(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
 }
 
@@ -51,7 +51,7 @@ function xmlText(xml: string, tag: string): string {
 }
 
 
-function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
+export function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
   // DTSTAMP always UTC datetime; date-only format for all-day DTSTART/DTEND
   const fmtUtc = (d: Date) => d.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z'
   const fmtDate = (d: Date) => {
@@ -84,7 +84,7 @@ function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): string {
 // Expansion window for recurring events (years back and forward from now)
 const EXPAND_YEARS = 2
 
-function parseEvents(icsText: string, calendarHref: string, etag?: string): CalendarEvent[] {
+export function parseEvents(icsText: string, calendarHref: string, etag?: string): CalendarEvent[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let jcal: any
   try {

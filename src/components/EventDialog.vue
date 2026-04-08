@@ -112,6 +112,8 @@
 import { reactive, ref, computed } from 'vue'
 import type { Calendar, CalendarEvent } from '@/services/caldav'
 import { useI18n } from '@/composables/useI18n'
+import { DAY_NAMES, getNthWeekday, parseRrule, buildRrule as buildRruleUtil } from '@/utils/rrule'
+import type { RepeatFreq, RepeatEnd } from '@/utils/rrule'
 
 const { t } = useI18n()
 
@@ -134,26 +136,16 @@ const emit = defineEmits<{
 
 const isNew = computed(() => !props.event)
 
-type RepeatFreq = 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
-type RepeatEnd = 'NEVER' | 'COUNT' | 'UNTIL'
-
 const weekDayLabels: Record<string, string> = {
   MO: t('Mo'), TU: t('Tu'), WE: t('We'), TH: t('Th'),
   FR: t('Fr'), SA: t('Sa'), SU: t('Su'),
 }
 
-const DAY_NAMES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
 const DAY_LABELS: Record<string, string> = {
   SU: t('Sun'), MO: t('Mon'), TU: t('Tue'), WE: t('Wed'),
   TH: t('Thu'), FR: t('Fri'), SA: t('Sat'),
 }
 const ORDINALS = [t('1st'), t('2nd'), t('3rd'), t('4th')]
-
-function getNthWeekday(date: Date): string {
-  const day = DAY_NAMES[date.getDay()]
-  const n = Math.ceil(date.getDate() / 7) // 1–4
-  return `${n}${day}`
-}
 
 function nthWeekdayLabel(byday: string): string {
   const m = byday.match(/^(-?\d+)([A-Z]{2})$/)
@@ -162,24 +154,6 @@ function nthWeekdayLabel(byday: string): string {
   const day = DAY_LABELS[m[2]] ?? m[2]
   const ord = n === -1 ? t('Last') : (ORDINALS[n - 1] ?? `${n}.`)
   return `${ord} ${day}`
-}
-
-function parseRrule(rrule: string) {
-  const freq = (rrule.match(/FREQ=(\w+)/)?.[1] ?? 'NONE') as RepeatFreq
-  const bydayRaw = rrule.match(/BYDAY=([^;]+)/)?.[1] ?? ''
-  const isNthWeekday = freq === 'MONTHLY' && /^-?\d+[A-Z]{2}$/.test(bydayRaw)
-  const days = !isNthWeekday && bydayRaw ? bydayRaw.split(',') : []
-  const count = rrule.match(/COUNT=(\d+)/)?.[1]
-  const until = rrule.match(/UNTIL=(\d{8})/)?.[1]
-  return {
-    freq,
-    days,
-    monthlyType: isNthWeekday ? 'NTHWEEKDAY' : 'DAYOFMONTH',
-    monthlyByday: isNthWeekday ? bydayRaw : '',
-    endType: count ? 'COUNT' : until ? 'UNTIL' : 'NEVER' as RepeatEnd,
-    count: count ? parseInt(count) : 10,
-    until: until ? `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}` : '',
-  }
 }
 
 const saveError = ref<string | null>(null)
@@ -237,21 +211,15 @@ const autoNthWeekdayLabel = computed(() => nthWeekdayLabel(autoNthWeekday.value)
 const autoMonthDay = computed(() => startDateForCalc.value.getDate())
 
 function buildRrule(): string | undefined {
-  if (form.repeatFreq === 'NONE') return undefined
-  let rule = `FREQ=${form.repeatFreq}`
-  if (form.repeatFreq === 'WEEKLY') {
-    const days = form.repeatDays.length ? form.repeatDays : [DAY_NAMES[startDateForCalc.value.getDay()]]
-    rule += `;BYDAY=${days.join(',')}`
-  }
-  if (form.repeatFreq === 'MONTHLY' && form.monthlyType === 'NTHWEEKDAY') {
-    rule += `;BYDAY=${autoNthWeekday.value}`
-  }
-  if (form.repeatEndType === 'COUNT' && form.repeatCount > 0) {
-    rule += `;COUNT=${form.repeatCount}`
-  } else if (form.repeatEndType === 'UNTIL' && form.repeatUntil) {
-    rule += `;UNTIL=${form.repeatUntil.replace(/-/g, '')}T000000Z`
-  }
-  return rule
+  return buildRruleUtil({
+    freq: form.repeatFreq,
+    days: form.repeatDays,
+    monthlyType: form.monthlyType,
+    endType: form.repeatEndType,
+    count: form.repeatCount,
+    until: form.repeatUntil,
+    startDate: startDateForCalc.value,
+  })
 }
 
 function parseDates() {
