@@ -17,7 +17,11 @@ jobs:
         run: apk add --no-cache git
 
       - name: Checkout
-        run: git clone ${{ github.server_url }}/${{ github.repository }}.git . && git checkout ${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${GITHUB_TOKEN}@${GITHUB_SERVER_URL#https://}/${{ github.repository }}.git" .
+          git checkout ${{ github.sha }}
 
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@latest --activate
