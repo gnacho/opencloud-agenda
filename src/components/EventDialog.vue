@@ -154,8 +154,16 @@ function handleSave() {
     // Compute the target calendarHref: if the user picked a different calendar,
     // build a new .ics URL in that collection (same UID, new collection path).
     const currentCal = props.calendars.find(c => props.event!.calendarHref.startsWith(c.href))
-    const newCalendarHref = form.calendarHref !== currentCal?.href
-      ? `${form.calendarHref.replace(/\/$/, '')}/${props.event!.uid}.ics`
+    const calendarChanged = form.calendarHref !== currentCal?.href
+
+    if (calendarChanged && props.event!.seriesUid) {
+      saveError.value = t('Moving recurring events between calendars is not supported.')
+      return
+    }
+
+    const eventUid = props.event!.seriesUid ?? props.event!.uid
+    const newCalendarHref = calendarChanged
+      ? `${form.calendarHref.replace(/\/$/, '')}/${eventUid}.ics`
       : props.event!.calendarHref
 
     emit('update', {
