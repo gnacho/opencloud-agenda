@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    name: Type Check / Build / Test
+    runs-on: docker
+    container:
+      image: node:20-alpine
+
+    steps:
+      - name: Install system deps
+        run: apk add --no-cache git
+
+      - name: Checkout
+        run: git clone ${{ github.server_url }}/${{ github.repository }}.git . && git checkout ${{ github.sha }}
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm vue-tsc --noEmit
+
+      - name: Build
+        run: pnpm vite build
+
+      - name: Test
+        run: pnpm test
