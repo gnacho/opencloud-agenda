@@ -126,8 +126,20 @@ export function useCalendar() {
   }
 
   async function updateEvent(event: CalendarEvent): Promise<void> {
-    const saved = await saveEvent(event)
-    events.value = events.value.map(e => (e.uid === event.uid ? saved : e))
+    const original = events.value.find(e => e.uid === event.uid)
+
+    if (original && original.calendarHref !== event.calendarHref) {
+      // Calendar changed — move: PUT to new location, then DELETE from old.
+      const c = await getClient()
+      const newEtag = await c.saveEvent(event)
+      await c.deleteEvent({ ...original })
+      events.value = events.value.map(e =>
+        e.uid === event.uid ? { ...event, etag: newEtag ?? event.etag } : e
+      )
+    } else {
+      const saved = await saveEvent(event)
+      events.value = events.value.map(e => (e.uid === event.uid ? saved : e))
+    }
   }
 
   async function createCalendar(name: string, color: string): Promise<void> {

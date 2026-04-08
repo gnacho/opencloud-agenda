@@ -151,6 +151,13 @@ function handleSave() {
       calendarHref: form.calendarHref,
     })
   } else {
+    // Compute the target calendarHref: if the user picked a different calendar,
+    // build a new .ics URL in that collection (same UID, new collection path).
+    const currentCal = props.calendars.find(c => props.event!.calendarHref.startsWith(c.href))
+    const newCalendarHref = form.calendarHref !== currentCal?.href
+      ? `${form.calendarHref.replace(/\/$/, '')}/${props.event!.uid}.ics`
+      : props.event!.calendarHref
+
     emit('update', {
       ...props.event!,
       title: form.title.trim(),
@@ -159,6 +166,7 @@ function handleSave() {
       allDay: form.allDay,
       location: form.location || undefined,
       description: form.description || undefined,
+      calendarHref: newCalendarHref,
     })
   }
 }
