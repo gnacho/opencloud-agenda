@@ -301,6 +301,46 @@ export class CalDavClient {
     return { href, displayName: name.trim(), color }
   }
 
+  // GET + patch text fields + PUT back — preserves RRULE and all other properties.
+  // Used when editing a recurring event so we never lose the recurrence rule.
+  async patchRecurringEvent(
+    href: string,
+    fields: { title: string; description?: string; location?: string },
+  ): Promise<string | undefined> {
+    const getRes = await this.request('GET', href)
+    const icsText = await getRes.text()
+
+    let jcal: unknown
+    try {
+      jcal = ICAL.parse(icsText)
+    } catch {
+      throw new Error('Failed to parse existing calendar data')
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const comp = new ICAL.Component(jcal as any)
+    const vevent = comp.getFirstSubcomponent('vevent')
+    if (!vevent) throw new Error('No VEVENT found in calendar data')
+
+    vevent.updatePropertyWithValue('summary', fields.title)
+    vevent.updatePropertyWithValue('dtstamp', ICAL.Time.fromJSDate(new Date(), true))
+
+    if (fields.description) {
+      vevent.updatePropertyWithValue('description', fields.description)
+    } else {
+      vevent.removeProperty('description')
+    }
+    if (fields.location) {
+      vevent.updatePropertyWithValue('location', fields.location)
+    } else {
+      vevent.removeProperty('location')
+    }
+
+    const modifiedIcs = comp.toString()
+    const putRes = await this.request('PUT', href, modifiedIcs)
+    return putRes.headers.get('ETag')?.replace(/"/g, '') ?? undefined
+  }
+
   // PROPPATCH: rename a calendar collection
   async renameCalendar(href: string, newName: string): Promise<void> {
     const body = `<?xml version="1.0" encoding="utf-8"?>

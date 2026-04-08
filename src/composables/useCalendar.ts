@@ -136,6 +136,20 @@ export function useCalendar() {
       events.value = events.value.map(e =>
         e.uid === event.uid ? { ...event, etag: newEtag ?? event.etag } : e
       )
+    } else if (event.seriesUid) {
+      // Recurring event occurrence — patch the original ICS to preserve RRULE.
+      const c = await getClient()
+      const newEtag = await c.patchRecurringEvent(event.calendarHref, {
+        title: event.title,
+        description: event.description,
+        location: event.location,
+      })
+      // Update all occurrences of this series in local state.
+      events.value = events.value.map(e =>
+        e.seriesUid === event.seriesUid
+          ? { ...e, title: event.title, description: event.description, location: event.location, etag: newEtag ?? e.etag }
+          : e
+      )
     } else {
       const saved = await saveEvent(event)
       events.value = events.value.map(e => (e.uid === event.uid ? saved : e))

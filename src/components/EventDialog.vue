@@ -36,6 +36,43 @@
         <textarea v-model="form.description" rows="3" :placeholder="t('Description')" />
       </label>
 
+      <!-- Repeat — hidden for recurring occurrences (seriesUid set) -->
+      <template v-if="!event?.seriesUid">
+        <label>
+          {{ t('Repeat') }}
+          <select v-model="form.repeatFreq">
+            <option value="NONE">{{ t('None') }}</option>
+            <option value="DAILY">{{ t('Daily') }}</option>
+            <option value="WEEKLY">{{ t('Weekly') }}</option>
+            <option value="MONTHLY">{{ t('Monthly') }}</option>
+            <option value="YEARLY">{{ t('Yearly') }}</option>
+          </select>
+        </label>
+
+        <div v-if="form.repeatFreq === 'WEEKLY'" class="repeat-days">
+          <label v-for="(label, day) in weekDayLabels" :key="day" class="day-label">
+            <input type="checkbox" :value="day" v-model="form.repeatDays" />
+            {{ label }}
+          </label>
+        </div>
+
+        <div v-if="form.repeatFreq !== 'NONE'" class="repeat-end">
+          <label>
+            {{ t('End') }}
+            <select v-model="form.repeatEndType">
+              <option value="NEVER">{{ t('Never') }}</option>
+              <option value="COUNT">{{ t('After') }}</option>
+              <option value="UNTIL">{{ t('Until') }}</option>
+            </select>
+          </label>
+          <label v-if="form.repeatEndType === 'COUNT'" class="row">
+            <input type="number" v-model.number="form.repeatCount" min="1" max="999" class="count-input" />
+            {{ t('times') }}
+          </label>
+          <input v-if="form.repeatEndType === 'UNTIL'" type="date" v-model="form.repeatUntil" />
+        </div>
+      </template>
+
       <label>
         {{ t('Calendar') }}
         <select v-model="form.calendarHref">
@@ -81,6 +118,28 @@ const emit = defineEmits<{
 }>()
 
 const isNew = computed(() => !props.event)
+
+type RepeatFreq = 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
+type RepeatEnd = 'NEVER' | 'COUNT' | 'UNTIL'
+
+const weekDayLabels: Record<string, string> = {
+  MO: t('Mo'), TU: t('Tu'), WE: t('We'), TH: t('Th'),
+  FR: t('Fr'), SA: t('Sa'), SU: t('Su'),
+}
+
+function parseRrule(rrule: string) {
+  const freq = (rrule.match(/FREQ=(\w+)/)?.[1] ?? 'NONE') as RepeatFreq
+  const days = rrule.match(/BYDAY=([^;]+)/)?.[1]?.split(',') ?? []
+  const count = rrule.match(/COUNT=(\d+)/)?.[1]
+  const until = rrule.match(/UNTIL=(\d{8})/)?.[1]
+  return {
+    freq,
+    days,
+    endType: count ? 'COUNT' : until ? 'UNTIL' : 'NEVER' as RepeatEnd,
+    count: count ? parseInt(count) : 10,
+    until: until ? `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}` : '',
+  }
+}
 const saveError = ref<string | null>(null)
 
 function toLocalDateString(d: Date) {
@@ -103,6 +162,8 @@ function allDayEndForDisplay(d: Date): Date {
   return new Date(d.getTime() - 24 * 60 * 60 * 1000)
 }
 
+const parsedRrule = props.event?.rrule ? parseRrule(props.event.rrule) : null
+
 const form = reactive({
   title: props.event?.title ?? '',
   allDay: props.event?.allDay ?? props.defaultAllDay ?? false,
@@ -117,7 +178,29 @@ const form = reactive({
   location: props.event?.location ?? '',
   description: props.event?.description ?? '',
   calendarHref: defaultCalHref,
+  repeatFreq: (parsedRrule?.freq ?? 'NONE') as RepeatFreq,
+  repeatDays: parsedRrule?.days ?? [] as string[],
+  repeatEndType: (parsedRrule?.endType ?? 'NEVER') as RepeatEnd,
+  repeatCount: parsedRrule?.count ?? 10,
+  repeatUntil: parsedRrule?.until ?? '',
 })
+
+function buildRrule(): string | undefined {
+  if (form.repeatFreq === 'NONE') return undefined
+  let rule = `FREQ=${form.repeatFreq}`
+  if (form.repeatFreq === 'WEEKLY') {
+    const days = form.repeatDays.length
+      ? form.repeatDays
+      : [['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][new Date(form.startDate || form.startDateTime).getDay()]]
+    rule += `;BYDAY=${days.join(',')}`
+  }
+  if (form.repeatEndType === 'COUNT' && form.repeatCount > 0) {
+    rule += `;COUNT=${form.repeatCount}`
+  } else if (form.repeatEndType === 'UNTIL' && form.repeatUntil) {
+    rule += `;UNTIL=${form.repeatUntil.replace(/-/g, '')}T000000Z`
+  }
+  return rule
+}
 
 function parseDates() {
   if (form.allDay) {
@@ -149,6 +232,7 @@ function handleSave() {
       location: form.location || undefined,
       description: form.description || undefined,
       calendarHref: form.calendarHref,
+      rrule: buildRrule(),
     })
   } else {
     // Compute the target calendarHref: if the user picked a different calendar,
@@ -175,6 +259,7 @@ function handleSave() {
       location: form.location || undefined,
       description: form.description || undefined,
       calendarHref: newCalendarHref,
+      rrule: props.event!.seriesUid ? props.event!.rrule : buildRrule(),
     })
   }
 }
@@ -357,5 +442,44 @@ button.danger:hover {
   color: var(--oc-color-swatch-danger-default, #e9322d);
   font-size: 0.85rem;
   margin: 0;
+}
+
+.repeat-days {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.day-label {
+  display: flex;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  font-weight: normal;
+  color: var(--oc-color-text-default, #1a1a1a);
+  cursor: pointer;
+}
+
+.repeat-end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.repeat-end label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.count-input {
+  width: 4.5rem;
+}
+
+.event-dialog {
+  max-height: 90vh;
+  overflow-y: auto;
 }
 </style>
