@@ -46,17 +46,21 @@ jobs:
           REPO=${{ github.repository }}
           API="${GITHUB_SERVER_URL}/api/v1"
 
-          # Check if a release already exists for this tag
-          RELEASE_ID=$(curl -sf "${API}/repos/${REPO}/releases/tags/${TAG}" \
-            -H "Authorization: token ${GITHUB_TOKEN}" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-
-          if [ -z "$RELEASE_ID" ]; then
-            RELEASE=$(curl -sf -X POST "${API}/repos/${REPO}/releases" \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"See [CHANGELOG](https://forgejo.linux-nerds.org/${REPO}/src/branch/main/CHANGELOG.md) for details.\"}")
-            RELEASE_ID=$(echo "$RELEASE" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+          # Delete any existing release for this tag (removes Ghost-authored or duplicate releases)
+          EXISTING_ID=$(curl -sf "${API}/repos/${REPO}/releases/tags/${TAG}" \
+            -H "Authorization: token ${GITHUB_TOKEN}" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2 || true)
+          if [ -n "$EXISTING_ID" ]; then
+            echo "Deleting existing release ${EXISTING_ID}"
+            curl -sf -X DELETE "${API}/repos/${REPO}/releases/${EXISTING_ID}" \
+              -H "Authorization: token ${GITHUB_TOKEN}"
           fi
+
+          # Create a fresh release under the RELEASE_TOKEN user
+          RELEASE=$(curl -sf -X POST "${API}/repos/${REPO}/releases" \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"See [CHANGELOG](https://forgejo.linux-nerds.org/${REPO}/src/branch/main/CHANGELOG.md) for details.\"}")
+          RELEASE_ID=$(echo "$RELEASE" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
           echo "Release ID: ${RELEASE_ID}"
 
