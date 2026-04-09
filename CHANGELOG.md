@@ -6,10 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - iCal subscriptions — add external `.ics` calendars as read-only feeds via the sidebar
-- CORS proxy at `/ics-proxy/` (Node.js container in the OpenCloud Docker stack) so browser-blocked `.ics` URLs can be fetched; protected by Traefik ForwardAuth (OpenCloud login required)
+- CORS proxy at `/ics-proxy/` (Node.js container in the OpenCloud Docker stack) so browser-blocked `.ics` URLs can be fetched; authenticated via OpenCloud Bearer token
 
 ### Fixed
 - Dark mode for Cancel button and input fields in the Subscription dialog
+- Proxy authentication now uses the OpenCloud Bearer token instead of Traefik ForwardAuth (which broke when switching between apps)
 
 ## [1.2.0] - 2026-04-09
 
