@@ -25,7 +25,7 @@ function saveToStorage(userId: string, subs: IcsSubscription[]) {
   localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(subs))
 }
 
-export function useSubscriptions(userId: () => string) {
+export function useSubscriptions(userId: () => string, accessToken: () => string) {
   const subscriptions = ref<IcsSubscription[]>([])
   const subscriptionEvents = ref<CalendarEvent[]>([])
   const subscriptionErrors = ref<Record<string, string>>({})
@@ -71,7 +71,9 @@ export function useSubscriptions(userId: () => string) {
 
   async function fetchOne(sub: IcsSubscription) {
     try {
-      const res = await fetch(proxyUrl(sub.url))
+      const res = await fetch(proxyUrl(sub.url), {
+        headers: accessToken() ? { Authorization: `Bearer ${accessToken()}` } : {},
+      })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const icsText = await res.text()
       // parseEvents uses a placeholder href since subscriptions have no CalDAV href

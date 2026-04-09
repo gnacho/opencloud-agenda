@@ -167,7 +167,7 @@ const {
 } = useCalendar()
 
 // --- subscriptions ---
-const { userId } = useAuth()
+const { userId, accessToken } = useAuth()
 const {
   subscriptions,
   subscriptionEvents,
@@ -175,7 +175,7 @@ const {
   addSubscription,
   removeSubscription,
   toggleSubscription,
-} = useSubscriptions(() => userId.value)
+} = useSubscriptions(() => userId.value, () => accessToken.value)
 
 const subscriptionDialogOpen = ref(false)
 
