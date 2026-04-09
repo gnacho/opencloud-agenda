@@ -65,9 +65,13 @@ export function useSubscriptions(userId: () => string) {
     }
   }
 
+  function proxyUrl(url: string): string {
+    return `/ics-proxy/${encodeURIComponent(url)}`
+  }
+
   async function fetchOne(sub: IcsSubscription) {
     try {
-      const res = await fetch(sub.url)
+      const res = await fetch(proxyUrl(sub.url))
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const icsText = await res.text()
       // parseEvents uses a placeholder href since subscriptions have no CalDAV href
