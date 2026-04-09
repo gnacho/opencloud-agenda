@@ -2,5 +2,5 @@
   "id": "agenda",
   "name": "Agenda",
   "description": "CalDAV calendar for OpenCloud",
-  "version": "0.1.0"
+  "version": "1.2.0"
 }
