@@ -55,8 +55,7 @@ jobs:
           RELEASE_ID=$(echo "$RELEASE" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
           # Upload the zip as a release asset
-          curl -sf -X POST "${API}/repos/${REPO}/releases/${RELEASE_ID}/assets" \
+          curl -sf -X POST "${API}/repos/${REPO}/releases/${RELEASE_ID}/assets?name=agenda-${TAG}.zip" \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Content-Type: application/zip" \
-            --data-binary @"agenda-${TAG}.zip" \
-            -G --data-urlencode "name=agenda-${TAG}.zip"
+            --data-binary @"agenda-${TAG}.zip"
