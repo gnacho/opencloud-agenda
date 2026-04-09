@@ -4,6 +4,9 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 
 [![AI Assisted](https://img.shields.io/badge/AI%20assisted-Claude%20Code-orange?logo=anthropic)](https://claude.ai) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
+> [!IMPORTANT]
+> This project is an independent, community-built tool and is not affiliated with, endorsed by, or associated with the [OpenCloud project](https://opencloud.eu) in any way.
+
 ## Features
 
 - **Month, week, day and list views** powered by [FullCalendar](https://fullcalendar.io/)
