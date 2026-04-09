@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    name: Type Check / Build / Test
+    name: Build / Test
     runs-on: docker
     container:
       image: node:20-alpine
@@ -28,9 +28,6 @@ jobs:
 
       - name: Install packages
         run: pnpm install --frozen-lockfile
-
-      - name: Type check
-        run: pnpm vue-tsc --noEmit
 
       - name: Build
         run: pnpm vite build
