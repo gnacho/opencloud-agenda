@@ -153,6 +153,14 @@ button {
   font-size: 0.9rem;
 }
 
+@media (prefers-color-scheme: dark) {
+  button:not(.primary) {
+    background: #2a2a2a;
+    color: #e8e8e8;
+    border-color: #555;
+  }
+}
+
 button.primary {
   background: var(--oc-color-primary, #0082c9);
   color: #fff;
