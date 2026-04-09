@@ -49,6 +49,29 @@
 
       <p v-if="error" class="error-msg">{{ error }}</p>
 
+      <!-- Subscriptions section -->
+      <div class="calendars-header">
+        <span class="calendars-label">{{ t('Subscriptions') }}</span>
+        <button class="btn-new-cal" :title="t('Add Subscription')" @click="subscriptionDialogOpen = true">+</button>
+      </div>
+
+      <ul class="calendar-list">
+        <li v-for="sub in subscriptions" :key="sub.id">
+          <input
+            type="checkbox"
+            :checked="sub.enabled"
+            @click.stop="toggleSubscription(sub.id)"
+          />
+          <span class="cal-dot" :style="{ background: sub.color }" />
+          <span class="cal-name" :title="sub.url">{{ sub.name }}</span>
+          <button class="btn-sub-remove" :title="t('Delete')" @click.stop="removeSubscription(sub.id)">×</button>
+        </li>
+      </ul>
+
+      <p v-for="(err, id) in subscriptionErrors" :key="id" class="error-msg sub-error">
+        {{ subscriptions.find(s => s.id === id)?.name }}: {{ err }}
+      </p>
+
       <div class="sidebar-footer">
         <button class="help-link" @click="helpOpen = true">? {{ de ? 'Hilfe' : 'Help' }}</button>
       </div>
@@ -74,6 +97,13 @@
       v-if="calendarDialogOpen"
       @create="handleCreateCalendar"
       @close="calendarDialogOpen = false"
+    />
+
+    <!-- Subscription dialog -->
+    <SubscriptionDialog
+      v-if="subscriptionDialogOpen"
+      @add="(url, name, color) => { addSubscription(url, name, color); subscriptionDialogOpen = false }"
+      @close="subscriptionDialogOpen = false"
     />
 
     <!-- Event dialog -->
@@ -106,8 +136,11 @@ import interactionPlugin from '@fullcalendar/interaction'
 import deLocale from '@fullcalendar/core/locales/de'
 import EventDialog from '@/components/EventDialog.vue'
 import CalendarDialog from '@/components/CalendarDialog.vue'
+import SubscriptionDialog from '@/components/SubscriptionDialog.vue'
 import HelpView from '@/views/HelpView.vue'
 import { useCalendar } from '@/composables/useCalendar'
+import { useSubscriptions } from '@/composables/useSubscriptions'
+import { useAuth } from '@/composables/useAuth'
 import { useI18n } from '@/composables/useI18n'
 import type { CalendarEvent } from '@/services/caldav'
 
@@ -132,6 +165,19 @@ const {
   deleteEvent,
   deleteOccurrence,
 } = useCalendar()
+
+// --- subscriptions ---
+const { userId } = useAuth()
+const {
+  subscriptions,
+  subscriptionEvents,
+  subscriptionErrors,
+  addSubscription,
+  removeSubscription,
+  toggleSubscription,
+} = useSubscriptions(() => userId.value)
+
+const subscriptionDialogOpen = ref(false)
 
 // --- calendar rename state ---
 const renamingHref = ref<string | null>(null)
@@ -191,23 +237,37 @@ function openEditEvent(event: CalendarEvent) {
 }
 
 // --- FullCalendar event mapping ---
-const fcEvents = computed(() =>
-  events.value
-  .filter(e => {
-    const cal = calendars.value.find(c => e.calendarHref.startsWith(c.href))
-    return cal ? !hiddenCalendars.value.has(cal.href) : true
-  })
-  .map(e => ({
+const fcEvents = computed(() => {
+  const caldavEvents = events.value
+    .filter(e => {
+      const cal = calendars.value.find(c => e.calendarHref.startsWith(c.href))
+      return cal ? !hiddenCalendars.value.has(cal.href) : true
+    })
+    .map(e => ({
+      id: e.uid,
+      title: e.title,
+      start: e.start,
+      end: e.end,
+      allDay: e.allDay,
+      backgroundColor: e.color ?? activeCalColor(e.calendarHref),
+      borderColor: e.color ?? activeCalColor(e.calendarHref),
+      extendedProps: { event: e, readonly: false },
+    }))
+
+  const subEvents = subscriptionEvents.value.map(e => ({
     id: e.uid,
     title: e.title,
     start: e.start,
     end: e.end,
     allDay: e.allDay,
-    backgroundColor: e.color ?? activeCalColor(e.calendarHref),
-    borderColor: e.color ?? activeCalColor(e.calendarHref),
-    extendedProps: { event: e },
-  })),
-)
+    backgroundColor: e.color ?? '#888',
+    borderColor: e.color ?? '#888',
+    editable: false,
+    extendedProps: { event: e, readonly: true },
+  }))
+
+  return [...caldavEvents, ...subEvents]
+})
 
 function activeCalColor(href: string): string {
   return calendars.value.find(c => href.startsWith(c.href))?.color ?? '#0082c9'
@@ -267,6 +327,7 @@ const calendarOptions = computed<CalendarOptions>(() => ({
     openNewEvent(info.start, end, info.allDay)
   },
   eventClick(info: EventClickArg) {
+    if (info.event.extendedProps.readonly) return
     const ev = info.event.extendedProps.event as CalendarEvent
     openEditEvent(ev)
   },
@@ -508,6 +569,28 @@ watch(calendars, () => {
   color: var(--oc-color-text-default);
   outline: none;
   min-width: 0;
+}
+
+.btn-sub-remove {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--oc-color-text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.calendar-list li:hover .btn-sub-remove {
+  opacity: 1;
+}
+
+.sub-error {
+  font-size: 0.78rem;
+  padding: 0 0.5rem;
 }
 
 /* ---- Main area ---- */

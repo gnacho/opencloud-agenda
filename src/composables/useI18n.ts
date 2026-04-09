@@ -65,6 +65,13 @@ const translations: Record<string, string> = {
   'Moving recurring events between calendars is not supported.': 'Serien-Termine können nicht zwischen Kalendern verschoben werden.',
   'Delete occurrence': 'Diesen Termin löschen',
   'Delete series': 'Serie löschen',
+  // Subscriptions
+  'Subscriptions': 'Abonnements',
+  'Add Subscription': 'Abonnement hinzufügen',
+  'iCal URL (.ics)': 'iCal-URL (.ics)',
+  'e.g. Public Holidays': 'z. B. Feiertage',
+  'Add': 'Hinzufügen',
+  'Please enter a valid URL.': 'Bitte eine gültige URL eingeben.',
 }
 
 function isGerman(): boolean {
