@@ -81,6 +81,13 @@ function submit() {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
 }
 
+@media (prefers-color-scheme: dark) {
+  .dialog {
+    background: #1e1e1e;
+    color: #e8e8e8;
+  }
+}
+
 h2 {
   margin: 0;
   font-size: 1.1rem;
@@ -103,6 +110,15 @@ input[type='url'] {
   background: var(--oc-color-background-default, #fff);
   color: inherit;
   font-size: 0.9rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  input[type='text'],
+  input[type='url'] {
+    background: #2a2a2a;
+    color: #e8e8e8;
+    border-color: #555;
+  }
 }
 
 input[type='color'] {
