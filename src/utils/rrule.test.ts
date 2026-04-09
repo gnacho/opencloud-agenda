@@ -56,47 +56,57 @@ describe('buildRrule', () => {
   const monday = new Date('2026-04-06T09:00:00Z') // Monday
 
   it('returns undefined for NONE', () => {
-    expect(buildRrule({ freq: 'NONE', days: [], monthlyType: 'DAYOFMONTH', endType: 'NEVER', count: 10, until: '', startDate: monday })).toBeUndefined()
+    expect(buildRrule({ freq: 'NONE', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })).toBeUndefined()
   })
 
   it('builds DAILY, never ending', () => {
-    const r = buildRrule({ freq: 'DAILY', days: [], monthlyType: 'DAYOFMONTH', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    const r = buildRrule({ freq: 'DAILY', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
     expect(r).toBe('FREQ=DAILY')
   })
 
   it('builds WEEKLY with explicit days', () => {
-    const r = buildRrule({ freq: 'WEEKLY', days: ['MO', 'WE'], monthlyType: 'DAYOFMONTH', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    const r = buildRrule({ freq: 'WEEKLY', days: ['MO', 'WE'], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
     expect(r).toBe('FREQ=WEEKLY;BYDAY=MO,WE')
   })
 
   it('builds WEEKLY defaulting to start-date weekday when no days selected', () => {
-    const r = buildRrule({ freq: 'WEEKLY', days: [], monthlyType: 'DAYOFMONTH', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    const r = buildRrule({ freq: 'WEEKLY', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
     expect(r).toBe('FREQ=WEEKLY;BYDAY=MO')
   })
 
   it('builds MONTHLY by day-of-month', () => {
-    const r = buildRrule({ freq: 'MONTHLY', days: [], monthlyType: 'DAYOFMONTH', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    const r = buildRrule({ freq: 'MONTHLY', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
     expect(r).toBe('FREQ=MONTHLY')
   })
 
   it('builds MONTHLY by Nth weekday (1st Monday)', () => {
-    const r = buildRrule({ freq: 'MONTHLY', days: [], monthlyType: 'NTHWEEKDAY', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    const r = buildRrule({ freq: 'MONTHLY', days: [], monthlyType: 'NTHWEEKDAY', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
     expect(r).toBe('FREQ=MONTHLY;BYDAY=1MO')
   })
 
   it('builds YEARLY', () => {
-    const r = buildRrule({ freq: 'YEARLY', days: [], monthlyType: 'DAYOFMONTH', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    const r = buildRrule({ freq: 'YEARLY', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
     expect(r).toBe('FREQ=YEARLY')
   })
 
   it('appends COUNT', () => {
-    const r = buildRrule({ freq: 'DAILY', days: [], monthlyType: 'DAYOFMONTH', endType: 'COUNT', count: 7, until: '', startDate: monday })
+    const r = buildRrule({ freq: 'DAILY', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'COUNT', count: 7, until: '', startDate: monday })
     expect(r).toBe('FREQ=DAILY;COUNT=7')
   })
 
-  it('appends UNTIL', () => {
-    const r = buildRrule({ freq: 'WEEKLY', days: ['TU'], monthlyType: 'DAYOFMONTH', endType: 'UNTIL', count: 10, until: '2026-12-31', startDate: monday })
-    expect(r).toBe('FREQ=WEEKLY;BYDAY=TU;UNTIL=20261231T000000Z')
+  it('appends UNTIL as end-of-day so last occurrence is not cut off', () => {
+    const r = buildRrule({ freq: 'WEEKLY', days: ['TU'], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'UNTIL', count: 10, until: '2026-12-31', startDate: monday })
+    expect(r).toBe('FREQ=WEEKLY;BYDAY=TU;UNTIL=20261231T235959Z')
+  })
+
+  it('preserves existing monthlyByday (-1MO) instead of recalculating from startDate', () => {
+    const r = buildRrule({ freq: 'MONTHLY', days: [], monthlyType: 'NTHWEEKDAY', monthlyByday: '-1MO', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    expect(r).toBe('FREQ=MONTHLY;BYDAY=-1MO')
+  })
+
+  it('derives monthlyByday from startDate when monthlyByday is empty (new event)', () => {
+    const r = buildRrule({ freq: 'MONTHLY', days: [], monthlyType: 'NTHWEEKDAY', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    expect(r).toBe('FREQ=MONTHLY;BYDAY=1MO')
   })
 
   it('roundtrips: parse → build gives equivalent rule', () => {

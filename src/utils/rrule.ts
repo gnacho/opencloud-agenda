@@ -42,6 +42,7 @@ export interface BuildRruleParams {
   freq: RepeatFreq
   days: string[]
   monthlyType: MonthlyType
+  monthlyByday: string // preserved BYDAY for NTHWEEKDAY (e.g. '-1MO', '2TU'); '' means derive from startDate
   endType: RepeatEnd
   count: number
   until: string // YYYY-MM-DD or ''
@@ -56,12 +57,12 @@ export function buildRrule(params: BuildRruleParams): string | undefined {
     rule += `;BYDAY=${days.join(',')}`
   }
   if (params.freq === 'MONTHLY' && params.monthlyType === 'NTHWEEKDAY') {
-    rule += `;BYDAY=${getNthWeekday(params.startDate)}`
+    rule += `;BYDAY=${params.monthlyByday || getNthWeekday(params.startDate)}`
   }
   if (params.endType === 'COUNT' && params.count > 0) {
     rule += `;COUNT=${params.count}`
   } else if (params.endType === 'UNTIL' && params.until) {
-    rule += `;UNTIL=${params.until.replace(/-/g, '')}T000000Z`
+    rule += `;UNTIL=${params.until.replace(/-/g, '')}T235959Z`
   }
   return rule
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { escapeXml, escapeIcs, buildIcs, parseEvents } from './caldav'
 
 describe('escapeXml', () => {
@@ -95,6 +95,10 @@ describe('buildIcs', () => {
 
 describe('parseEvents', () => {
   const href = 'https://cal.example.com/events/test.ics'
+
+  // Pin Date.now() so the ±2-year expansion window always covers our 2026 fixtures.
+  beforeEach(() => vi.useFakeTimers({ now: new Date('2026-04-09T00:00:00Z') }))
+  afterEach(() => vi.useRealTimers())
 
   function makeIcs(veventBody: string): string {
     return [
