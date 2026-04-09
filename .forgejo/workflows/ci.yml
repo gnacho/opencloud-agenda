@@ -30,7 +30,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm vite build
+        run: pnpm build
 
       - name: Test
         run: pnpm test
