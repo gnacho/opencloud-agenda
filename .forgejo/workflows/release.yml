@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: docker
+    container:
+      image: node:20-alpine
+
+    steps:
+      - name: Install system deps
+        run: apk add --no-cache git zip curl
+
+      - name: Checkout
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${GITHUB_TOKEN}@${GITHUB_SERVER_URL#https://}/${{ github.repository }}.git" .
+          git checkout ${{ github.sha }}
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package zip
+        run: |
+          mkdir -p _pkg/agenda
+          cp -r dist/* _pkg/agenda/
+          cd _pkg && zip -r ../agenda-${{ github.ref_name }}.zip agenda/
+
+      - name: Create release and upload asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ github.ref_name }}
+          REPO=${{ github.repository }}
+          API="${GITHUB_SERVER_URL}/api/v1"
+
+          # Create the release
+          RELEASE=$(curl -sf -X POST "${API}/repos/${REPO}/releases" \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"See [CHANGELOG](https://forgejo.linux-nerds.org/${REPO}/src/branch/main/CHANGELOG.md) for details.\"}")
+
+          RELEASE_ID=$(echo "$RELEASE" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+
+          # Upload the zip as a release asset
+          curl -sf -X POST "${API}/repos/${REPO}/releases/${RELEASE_ID}/assets" \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/zip" \
+            --data-binary @"agenda-${TAG}.zip" \
+            -G --data-urlencode "name=agenda-${TAG}.zip"
