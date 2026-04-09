@@ -12,7 +12,8 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 - **CalDAV sync** — compatible with Thunderbird, DAVx⁵ and other CalDAV clients; Thunderbird-created recurring events are correctly expanded and editable
 - **Calendar management** — create calendars with custom colors, rename by double-click, show/hide per calendar
 - **Move events between calendars** — change the calendar in the edit dialog
-- **Manual refresh** — ↻ button in the sidebar reloads all data from the server on demand
+- **iCal subscriptions** — add external `.ics` calendars (public holidays, team calendars) as read-only feeds; fetched via a built-in CORS proxy
+- **Manual refresh** — ↻ button in the sidebar reloads all data and subscriptions from the server on demand
 - **Bilingual UI** — English and German, based on the browser/OpenCloud language setting
 - **Dark mode support** — follows the OpenCloud theme
 - **Secure token management** — app tokens are cached in `localStorage` (24 h TTL), deduplicated across tabs, and refreshed automatically on expiry

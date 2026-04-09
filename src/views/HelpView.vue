@@ -84,6 +84,22 @@
       </section>
 
       <section>
+        <h2>{{ de ? 'Abonnements (externe Kalender)' : 'Subscriptions (external calendars)' }}</h2>
+        <ul>
+          <li v-if="de">„+"-Button neben „Abonnements" → externe iCal-URL (.ics) als Nur-Lese-Kalender einbinden</li>
+          <li v-else>"+" button next to "Subscriptions" → add an external iCal URL (.ics) as a read-only calendar</li>
+          <li v-if="de">Name, URL und Farbe frei wählbar (z. B. Feiertage, Teamkalender)</li>
+          <li v-else>Choose name, URL and color freely (e.g. public holidays, team calendars)</li>
+          <li v-if="de">Haken → Abonnement ein-/ausblenden; × beim Hover → Abonnement löschen</li>
+          <li v-else>Checkbox → show/hide subscription; × on hover → remove subscription</li>
+          <li v-if="de">Abonnierte Termine sind schreibgeschützt – kein Dialog beim Klick, kein Verschieben</li>
+          <li v-else>Subscribed events are read-only — no dialog on click, no drag &amp; drop</li>
+          <li v-if="de">↻-Button lädt alle Abonnements neu</li>
+          <li v-else>↻ button reloads all subscriptions</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>{{ de ? 'Hinweise' : 'Notes' }}</h2>
         <ul>
           <li v-if="de">Ganztägige Termine: das Enddatum im Dialog ist <em>inklusive</em> — „Ende: 21.04" heißt der Termin läuft bis einschließlich 21.04.</li>
@@ -106,7 +122,7 @@
 <script setup lang="ts">
 defineEmits<{ (e: 'close'): void }>()
 const de = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('de')
-const version = '1.1.0'
+const version = '1.3.0'
 </script>
 
 <style scoped>
