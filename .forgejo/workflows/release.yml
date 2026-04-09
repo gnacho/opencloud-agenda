@@ -38,7 +38,7 @@ jobs:
           cp -r dist/* _pkg/agenda/
           cd _pkg && zip -r ../agenda-${{ github.ref_name }}.zip agenda/
 
-      - name: Upload release asset
+      - name: Create release and upload asset
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
@@ -46,18 +46,16 @@ jobs:
           REPO=${{ github.repository }}
           API="${GITHUB_SERVER_URL}/api/v1"
 
-          # Wait for Forgejo to auto-create the release from the tag (retry up to 30s)
-          for i in $(seq 1 6); do
-            RELEASE_ID=$(curl -sf "${API}/repos/${REPO}/releases/tags/${TAG}" \
-              -H "Authorization: token ${GITHUB_TOKEN}" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
-            [ -n "$RELEASE_ID" ] && break
-            echo "Waiting for release to appear... ($i)"
-            sleep 5
-          done
+          # Check if a release already exists for this tag
+          RELEASE_ID=$(curl -sf "${API}/repos/${REPO}/releases/tags/${TAG}" \
+            -H "Authorization: token ${GITHUB_TOKEN}" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 
           if [ -z "$RELEASE_ID" ]; then
-            echo "ERROR: Release for tag ${TAG} not found after waiting."
-            exit 1
+            RELEASE=$(curl -sf -X POST "${API}/repos/${REPO}/releases" \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"See [CHANGELOG](https://forgejo.linux-nerds.org/${REPO}/src/branch/main/CHANGELOG.md) for details.\"}")
+            RELEASE_ID=$(echo "$RELEASE" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
           fi
 
           echo "Release ID: ${RELEASE_ID}"
