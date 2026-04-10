@@ -251,4 +251,27 @@ describe('useSubscriptions — logout cleanup', () => {
     expect(subscriptionEvents.value).toEqual([])
     expect(subscriptionErrors.value).toEqual({})
   })
+
+  it('clears events and errors immediately when switching from user A to user B', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false }) as Response))
+
+    const userId = ref('user-A')
+    const accessToken = ref('tok')
+    const { subscriptionEvents, subscriptionErrors } = useSubscriptions(
+      () => userId.value, () => accessToken.value,
+    )
+    await flush()
+
+    // Pre-seed state as if user A had loaded events and an error
+    subscriptionEvents.value = [{ uid: 'sub_a_1' } as never]
+    subscriptionErrors.value = { 'sub-a': 'HTTP 503' }
+
+    // Switch directly to user B (not a logout — both are non-empty)
+    userId.value = 'user-B'
+    await nextTick()
+
+    // Events and errors must be gone synchronously, before any fetch completes
+    expect(subscriptionEvents.value).toEqual([])
+    expect(subscriptionErrors.value).toEqual({})
+  })
 })
