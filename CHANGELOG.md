@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-04-10
+
+### Fixed
+- Subscriptions: token arriving after userId now triggers a server reload instead of staying on the localStorage fallback
+- Subscriptions: concurrent writes are debounced (300 ms) so rapid changes no longer risk an older snapshot overwriting a newer one on the server
+- Subscriptions: offline edits made while no token is available are pushed to the server when the token arrives, instead of being overwritten by an older server copy
+- Subscriptions: the locally-modified flag is now version-guarded — a stale in-flight write that resolves after a newer offline edit can no longer clear the flag and cause the next reload to accept stale server data
+- Subscriptions: all state (subscriptions, events, errors) is cleared immediately on direct user-to-user switch, not just on logout
+- Subscriptions: in-flight `load()` and `fetchOne()` results from a previous session are discarded after logout or user switch (session counter)
+- Subscriptions: `locallyModified` is only cleared after a confirmed server write (`ok: true`); a failed push leaves the flag set so the next reload retries
+
+### Added
+- 12 unit tests for `useSubscriptions` covering auth-timing, debounce ordering, cross-account write safety, session invalidation, offline-edit preservation, and write-failure retry
+- `vitest.config.ts` now resolves the `@/` alias so composable tests can import from `@/services/`
+
 ## [1.3.0] - 2026-04-09
 
 ### Added
