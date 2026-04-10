@@ -105,11 +105,20 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     }
   }
 
+  let writeTimer: ReturnType<typeof setTimeout> | null = null
+
   function persist() {
     const uid = userId()
-    const token = accessToken()
     saveToStorage(uid, subscriptions.value)
-    if (token) saveToServer(uid, token, subscriptions.value)
+    // Debounce server writes: rapid successive changes cancel the previous
+    // pending write so only the latest snapshot reaches the server.
+    if (writeTimer !== null) clearTimeout(writeTimer)
+    writeTimer = setTimeout(() => {
+      writeTimer = null
+      const currentUid = userId()
+      const currentToken = accessToken()
+      if (currentUid && currentToken) saveToServer(currentUid, currentToken, subscriptions.value)
+    }, 300)
   }
 
   function addSubscription(url: string, name: string, color: string) {
@@ -179,14 +188,19 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     await Promise.all(enabled.map(fetchOne))
   }
 
-  // Reload when userId changes
-  watch(userId, async (uid) => {
-    if (uid) {
-      await load()
-      fetchAll()
-    } else {
+  // Reload when userId changes OR when accessToken first becomes available.
+  // If userId arrives before accessToken, the initial load() falls back to
+  // localStorage; this watcher retries from the server once the token is ready.
+  watch([userId, accessToken], async ([uid, token], old) => {
+    const [oldUid, oldToken] = old ?? [undefined, undefined]
+    if (!uid) {
       subscriptions.value = []
       subscriptionEvents.value = []
+      return
+    }
+    if (uid !== oldUid || (token && !oldToken)) {
+      await load()
+      fetchAll()
     }
   }, { immediate: true })
 
