@@ -95,7 +95,13 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
   // leaking into the current one.
   let session = 0
 
-  async function load() {
+  // Set when persist() writes to localStorage only (no token available yet).
+  // Tells load() that local state is newer than whatever the server holds, so
+  // a late-arriving token should push local data to the server rather than
+  // overwrite it with an older server copy.
+  let locallyModified = false
+
+  async function load(tokenJustArrived = false) {
     const uid = userId()
     const token = accessToken()
     if (!uid) return
@@ -105,9 +111,18 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     const serverSubs = token ? await loadFromServer(uid, token) : null
     if (mySession !== session) return  // user switched or logged out while we waited
     if (serverSubs !== null) {
-      subscriptions.value = serverSubs
-      // Keep local cache in sync.
-      saveToStorage(uid, serverSubs)
+      if (tokenJustArrived && locallyModified) {
+        // Local state is newer than the server copy — push it up instead of
+        // overwriting the user's offline changes.
+        saveToServer(uid, token, subscriptions.value)
+        saveToStorage(uid, subscriptions.value)
+        locallyModified = false
+      } else {
+        subscriptions.value = serverSubs
+        // Keep local cache in sync.
+        saveToStorage(uid, serverSubs)
+        locallyModified = false
+      }
     } else {
       subscriptions.value = loadFromStorage(uid)
     }
@@ -125,10 +140,20 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     // timer fires cannot redirect the write to a different account.
     const snapshotUid = userId()
     const snapshotSubs = [...subscriptions.value]
+    const token = accessToken()
+    if (!token) {
+      // No token yet — mark as locally modified so a late token arrival
+      // pushes this state to the server instead of pulling an older copy.
+      locallyModified = true
+      return
+    }
     writeTimer = setTimeout(() => {
       writeTimer = null
       const currentToken = accessToken()
-      if (snapshotUid && currentToken) saveToServer(snapshotUid, currentToken, snapshotSubs)
+      if (snapshotUid && currentToken) {
+        saveToServer(snapshotUid, currentToken, snapshotSubs)
+        locallyModified = false
+      }
     }, 300)
   }
 
@@ -209,6 +234,7 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     const [oldUid, oldToken] = old ?? [undefined, undefined]
     if (!uid) {
       session++  // invalidate all in-flight requests for the previous user
+      locallyModified = false
       subscriptions.value = []
       subscriptionEvents.value = []
       subscriptionErrors.value = {}
@@ -216,14 +242,16 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     }
     if (uid !== oldUid || (token && !oldToken)) {
       session++  // invalidate requests from the previous user/session
+      const tokenJustArrived = !!(token && !oldToken && uid === oldUid)
       if (uid !== oldUid) {
         // Clear all state immediately so user A's data is never visible
         // while user B's content is loading.
+        locallyModified = false
         subscriptions.value = []
         subscriptionEvents.value = []
         subscriptionErrors.value = {}
       }
-      await load()
+      await load(tokenJustArrived)
       fetchAll()
     }
   }, { immediate: true })

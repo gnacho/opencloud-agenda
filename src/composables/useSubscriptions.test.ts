@@ -84,6 +84,39 @@ describe('useSubscriptions — accessToken timing', () => {
     // Exactly one GET (initial load) — no second load because token was already there
     expect(serverCalls).toHaveLength(1)
   })
+
+  it('pushes local changes to server instead of overwriting when token arrives late', async () => {
+    const serverSubs = [{ id: 'srv-old', url: 'http://old.ics', name: 'Old', color: '#888', enabled: true }]
+    const localSub  = { id: 'local-1', url: 'http://new.ics', name: 'New', color: '#0f0', enabled: true }
+    const putBodies: string[] = []
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') { putBodies.push(init.body as string); return { ok: true } as Response }
+      if (String(url).includes('subscriptions.json')) return { ok: true, json: async () => serverSubs } as Response
+      return { ok: false } as Response
+    }))
+
+    const { accessToken, subscriptions, addSubscription } = makeSubs('user-late', '')
+
+    await flush()
+    // No token — loaded from localStorage (empty); user adds a subscription offline
+    addSubscription(localSub.url, localSub.name, localSub.color)
+    await flush()
+    expect(subscriptions.value).toHaveLength(1)
+    expect(subscriptions.value[0].url).toBe(localSub.url)
+
+    // Token arrives — must NOT overwrite local changes with older server data
+    accessToken.value = 'tok-late'
+    await flush()
+
+    expect(subscriptions.value).toHaveLength(1)
+    expect(subscriptions.value[0].url).toBe(localSub.url)
+
+    // Local state must have been pushed to server (one PUT with the new sub)
+    expect(putBodies).toHaveLength(1)
+    const saved = JSON.parse(putBodies[0]) as { url: string }[]
+    expect(saved[0].url).toBe(localSub.url)
+  })
 })
 
 // ── Write-ordering / debounce tests ───────────────────────────────────────────
