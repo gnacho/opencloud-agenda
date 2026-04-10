@@ -142,6 +142,59 @@ describe('useSubscriptions — accessToken timing', () => {
     expect(subscriptions.value).toHaveLength(1)
     expect(subscriptions.value[0].url).toBe(localSub.url)
   })
+
+  it('does not clear locallyModified when a stale online write resolves after a newer offline edit', async () => {
+    // Scenario: user starts offline (no token), makes an edit, gets a token
+    // (online write starts), loses token, makes another edit, old write resolves,
+    // then gets token again — final load must push local state, not accept server copy.
+    const serverSubs = [{ id: 'srv-stale', url: 'http://stale.ics', name: 'Stale', color: '#888', enabled: true }]
+
+    let resolveOnlinePut!: (v: Response) => void
+    let putCount = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        putCount++
+        return new Promise<Response>(r => { resolveOnlinePut = r })
+      }
+      if (String(url).includes('subscriptions.json')) return { ok: true, json: async () => serverSubs } as Response
+      return { ok: false } as Response
+    }))
+
+    const { accessToken, subscriptions, addSubscription } = makeSubs('user-interleave', '')
+
+    await flush()
+    expect(subscriptions.value).toEqual([])  // started offline, localStorage empty
+
+    // Offline edit #1
+    addSubscription('http://sub-a.ics', 'Sub-A', '#f00')
+    await flush()
+
+    // Token arrives → debounce fires → PUT #1 in-flight
+    accessToken.value = 'tok-1'
+    await flush()
+    vi.runAllTimers()
+    await flush()
+    expect(putCount).toBe(1)
+
+    // Token lost → offline edit #2 → modifyVersion increments
+    accessToken.value = ''
+    addSubscription('http://sub-b.ics', 'Sub-B', '#00f')
+    await flush()
+
+    // PUT #1 resolves ok — capturedVersion mismatch must prevent clearing locallyModified
+    resolveOnlinePut({ ok: true } as Response)
+    await flush()
+
+    // Token comes back → load() must push local state, not accept stale server copy
+    accessToken.value = 'tok-2'
+    await flush()
+
+    // Both offline subs must be present; stale server sub must not have replaced them
+    const urls = subscriptions.value.map(s => s.url)
+    expect(urls).toContain('http://sub-a.ics')
+    expect(urls).toContain('http://sub-b.ics')
+    expect(urls).not.toContain('http://stale.ics')
+  })
 })
 
 // ── Write-ordering / debounce tests ───────────────────────────────────────────

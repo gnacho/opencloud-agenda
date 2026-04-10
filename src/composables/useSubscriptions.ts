@@ -102,6 +102,10 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
   // a late-arriving token should push local data to the server rather than
   // overwrite it with an older server copy.
   let locallyModified = false
+  // Incremented every time locallyModified is set to true. A write callback
+  // captures the version at launch and may only clear the flag when it matches,
+  // preventing a stale in-flight write from wiping a newer offline edit.
+  let modifyVersion = 0
 
   async function load(tokenJustArrived = false) {
     const uid = userId()
@@ -116,12 +120,12 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
       if (tokenJustArrived && locallyModified) {
         // Local state is newer than the server copy — push it up instead of
         // overwriting the user's offline changes. Only clear the flag when the
-        // push is confirmed; a failed write must keep locallyModified = true so
-        // the next reload retries rather than accepting the stale server copy.
+        // push is confirmed AND no newer offline edit has arrived in the meantime.
+        const capturedVersion = modifyVersion
         const ok = await saveToServer(uid, token, subscriptions.value)
         if (mySession !== session) return
         saveToStorage(uid, subscriptions.value)
-        if (ok) locallyModified = false
+        if (ok && modifyVersion === capturedVersion) locallyModified = false
       } else {
         subscriptions.value = serverSubs
         // Keep local cache in sync.
@@ -149,15 +153,17 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     if (!token) {
       // No token yet — mark as locally modified so a late token arrival
       // pushes this state to the server instead of pulling an older copy.
+      modifyVersion++
       locallyModified = true
       return
     }
+    const capturedVersion = modifyVersion
     writeTimer = setTimeout(() => {
       writeTimer = null
       const currentToken = accessToken()
       if (snapshotUid && currentToken) {
         saveToServer(snapshotUid, currentToken, snapshotSubs).then(ok => {
-          if (ok) locallyModified = false
+          if (ok && modifyVersion === capturedVersion) locallyModified = false
         })
       }
     }, 300)
@@ -241,6 +247,7 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     if (!uid) {
       session++  // invalidate all in-flight requests for the previous user
       locallyModified = false
+      modifyVersion++
       subscriptions.value = []
       subscriptionEvents.value = []
       subscriptionErrors.value = {}
@@ -253,6 +260,7 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
         // Clear all state immediately so user A's data is never visible
         // while user B's content is loading.
         locallyModified = false
+        modifyVersion++
         subscriptions.value = []
         subscriptionEvents.value = []
         subscriptionErrors.value = {}
