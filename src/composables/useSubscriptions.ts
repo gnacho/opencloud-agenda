@@ -11,6 +11,10 @@ export interface IcsSubscription {
 }
 
 const STORAGE_KEY_PREFIX = 'agenda_subscriptions_'
+const WEBDAV_DIR = '.agenda'
+const WEBDAV_FILE = 'subscriptions.json'
+
+// ── localStorage (cache / offline fallback) ───────────────────────────────────
 
 function loadFromStorage(userId: string): IcsSubscription[] {
   try {
@@ -25,19 +29,87 @@ function saveToStorage(userId: string, subs: IcsSubscription[]) {
   localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(subs))
 }
 
+// ── WebDAV Storage ────────────────────────────────────────────────────────────
+
+function webdavUrl(userId: string): string {
+  return `/remote.php/dav/files/${encodeURIComponent(userId)}/${WEBDAV_DIR}/${WEBDAV_FILE}`
+}
+
+function webdavDirUrl(userId: string): string {
+  return `/remote.php/dav/files/${encodeURIComponent(userId)}/${WEBDAV_DIR}/`
+}
+
+async function loadFromServer(userId: string, accessToken: string): Promise<IcsSubscription[] | null> {
+  try {
+    const res = await fetch(webdavUrl(userId), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return null
+    return await res.json() as IcsSubscription[]
+  } catch {
+    return null
+  }
+}
+
+async function saveToServer(userId: string, accessToken: string, subs: IcsSubscription[]): Promise<void> {
+  try {
+    const url = webdavUrl(userId)
+    let res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(subs),
+    })
+    if (res.status === 409) {
+      // Parent directory missing — create it first.
+      await fetch(webdavDirUrl(userId), {
+        method: 'MKCOL',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(subs),
+      })
+    }
+  } catch {
+    // Server save failure is non-fatal — localStorage cache remains valid.
+  }
+}
+
+// ── composable ────────────────────────────────────────────────────────────────
+
 export function useSubscriptions(userId: () => string, accessToken: () => string) {
   const subscriptions = ref<IcsSubscription[]>([])
   const subscriptionEvents = ref<CalendarEvent[]>([])
   const subscriptionErrors = ref<Record<string, string>>({})
 
-  function load() {
+  async function load() {
     const uid = userId()
+    const token = accessToken()
     if (!uid) return
-    subscriptions.value = loadFromStorage(uid)
+
+    // Try server first; fall back to local cache.
+    const serverSubs = token ? await loadFromServer(uid, token) : null
+    if (serverSubs !== null) {
+      subscriptions.value = serverSubs
+      // Keep local cache in sync.
+      saveToStorage(uid, serverSubs)
+    } else {
+      subscriptions.value = loadFromStorage(uid)
+    }
   }
 
   function persist() {
-    saveToStorage(userId(), subscriptions.value)
+    const uid = userId()
+    const token = accessToken()
+    saveToStorage(uid, subscriptions.value)
+    if (token) saveToServer(uid, token, subscriptions.value)
   }
 
   function addSubscription(url: string, name: string, color: string) {
@@ -108,9 +180,9 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
   }
 
   // Reload when userId changes
-  watch(userId, (uid) => {
+  watch(userId, async (uid) => {
     if (uid) {
-      load()
+      await load()
       fetchAll()
     } else {
       subscriptions.value = []
