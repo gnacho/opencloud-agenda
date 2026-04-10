@@ -257,12 +257,13 @@ describe('useSubscriptions — logout cleanup', () => {
 
     const userId = ref('user-A')
     const accessToken = ref('tok')
-    const { subscriptionEvents, subscriptionErrors } = useSubscriptions(
+    const { subscriptions, subscriptionEvents, subscriptionErrors } = useSubscriptions(
       () => userId.value, () => accessToken.value,
     )
     await flush()
 
-    // Pre-seed state as if user A had loaded events and an error
+    // Pre-seed state as if user A had loaded subscriptions, events and an error
+    subscriptions.value = [{ id: 'sub-a', url: 'http://a.ics', name: 'A', color: '#f00', enabled: true }]
     subscriptionEvents.value = [{ uid: 'sub_a_1' } as never]
     subscriptionErrors.value = { 'sub-a': 'HTTP 503' }
 
@@ -270,7 +271,8 @@ describe('useSubscriptions — logout cleanup', () => {
     userId.value = 'user-B'
     await nextTick()
 
-    // Events and errors must be gone synchronously, before any fetch completes
+    // All three must be cleared synchronously, before any fetch completes
+    expect(subscriptions.value).toEqual([])
     expect(subscriptionEvents.value).toEqual([])
     expect(subscriptionErrors.value).toEqual({})
   })

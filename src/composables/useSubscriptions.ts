@@ -217,8 +217,9 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     if (uid !== oldUid || (token && !oldToken)) {
       session++  // invalidate requests from the previous user/session
       if (uid !== oldUid) {
-        // Clear events and errors immediately so user A's data is never visible
+        // Clear all state immediately so user A's data is never visible
         // while user B's content is loading.
+        subscriptions.value = []
         subscriptionEvents.value = []
         subscriptionErrors.value = {}
       }
