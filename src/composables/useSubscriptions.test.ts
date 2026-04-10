@@ -194,4 +194,61 @@ describe('useSubscriptions — logout cleanup', () => {
 
     expect(subscriptionErrors.value).toEqual({})
   })
+
+  it('discards load() result that resolves after logout', async () => {
+    let resolveLoad!: (v: Response) => void
+    const slowFetch = vi.fn(() => new Promise<Response>(r => { resolveLoad = r }))
+    vi.stubGlobal('fetch', slowFetch)
+
+    const userId = ref('user-Y')
+    const accessToken = ref('tok')
+    const { subscriptions } = useSubscriptions(() => userId.value, () => accessToken.value)
+
+    await flush()
+    // load() is in flight — resolveLoad not called yet
+
+    // Log out: clears state and increments session
+    userId.value = ''
+    await flush()
+    expect(subscriptions.value).toEqual([])
+
+    // Now the slow server response arrives — should be ignored
+    resolveLoad({ ok: true, json: async () => [{ id: 'stale', url: 'http://x.ics', name: 'X', color: '#f00', enabled: true }] } as Response)
+    await flush()
+
+    // State must remain cleared, not repopulated with the old user's data
+    expect(subscriptions.value).toEqual([])
+  })
+
+  it('discards fetchOne() events/errors that resolve after user switch', async () => {
+    let resolveFeed!: (v: Response) => void
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (String(url).includes('ics-proxy')) {
+        return new Promise<Response>(r => { resolveFeed = r })
+      }
+      return Promise.resolve({ ok: false } as Response)
+    }))
+
+    const userId = ref('user-Z')
+    const accessToken = ref('tok')
+    const { subscriptions, subscriptionEvents, subscriptionErrors, fetchAll } = useSubscriptions(
+      () => userId.value, () => accessToken.value,
+    )
+    await flush()
+
+    // Seed a subscription and kick off a feed fetch — it hangs
+    subscriptions.value = [{ id: 'sub-z', url: 'http://z.ics', name: 'Z', color: '#00f', enabled: true }]
+    fetchAll()
+
+    // Switch user before the feed response arrives
+    userId.value = 'user-Z2'
+    await flush()
+
+    // Feed response for user-Z arrives now — must be discarded
+    resolveFeed({ ok: true, text: async () => '' } as unknown as Response)
+    await flush()
+
+    expect(subscriptionEvents.value).toEqual([])
+    expect(subscriptionErrors.value).toEqual({})
+  })
 })

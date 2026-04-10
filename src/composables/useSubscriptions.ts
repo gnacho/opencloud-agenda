@@ -89,13 +89,21 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
   const subscriptionEvents = ref<CalendarEvent[]>([])
   const subscriptionErrors = ref<Record<string, string>>({})
 
+  // Incremented on every logout or user-switch. Each async operation captures
+  // the value at start and bails silently if it has changed by the time it
+  // tries to write, preventing stale results from a previous session from
+  // leaking into the current one.
+  let session = 0
+
   async function load() {
     const uid = userId()
     const token = accessToken()
     if (!uid) return
 
+    const mySession = session
     // Try server first; fall back to local cache.
     const serverSubs = token ? await loadFromServer(uid, token) : null
+    if (mySession !== session) return  // user switched or logged out while we waited
     if (serverSubs !== null) {
       subscriptions.value = serverSubs
       // Keep local cache in sync.
@@ -154,12 +162,14 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
   }
 
   async function fetchOne(sub: IcsSubscription) {
+    const mySession = session
     try {
       const res = await fetch(proxyUrl(sub.url), {
         headers: accessToken() ? { Authorization: `Bearer ${accessToken()}` } : {},
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const icsText = await res.text()
+      if (mySession !== session) return  // user switched or logged out while fetching
       // parseEvents uses a placeholder href since subscriptions have no CalDAV href
       const parsed = parseEvents(icsText, sub.url)
       // prefix all UIDs to avoid collisions with CalDAV events
@@ -179,6 +189,7 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
       delete errs[sub.id]
       subscriptionErrors.value = errs
     } catch (e) {
+      if (mySession !== session) return  // discard errors from a previous session
       subscriptionErrors.value = {
         ...subscriptionErrors.value,
         [sub.id]: e instanceof Error ? e.message : String(e),
@@ -197,12 +208,14 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
   watch([userId, accessToken], async ([uid, token], old) => {
     const [oldUid, oldToken] = old ?? [undefined, undefined]
     if (!uid) {
+      session++  // invalidate all in-flight requests for the previous user
       subscriptions.value = []
       subscriptionEvents.value = []
       subscriptionErrors.value = {}
       return
     }
     if (uid !== oldUid || (token && !oldToken)) {
+      session++  // invalidate requests from the previous user/session
       await load()
       fetchAll()
     }
