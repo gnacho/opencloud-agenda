@@ -142,4 +142,56 @@ describe('useSubscriptions — persist debounce', () => {
     expect(putBodies).toHaveLength(1)
     expect(JSON.parse(putBodies[0])).toEqual([])
   })
+
+  it('does not write user A data to user B when account switches before debounce fires', async () => {
+    const writes: { uid: string; body: string }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') writes.push({ uid: String(url), body: init.body as string })
+      return { ok: true, json: async () => [] } as Response
+    }))
+
+    const userId = ref('user-A')
+    const accessToken = ref('tok')
+    const { addSubscription } = useSubscriptions(() => userId.value, () => accessToken.value)
+
+    await flush()
+
+    // User A adds a subscription — debounce timer starts but has not fired yet
+    addSubscription('http://a.ics', 'A-feed', '#f00')
+    expect(writes).toHaveLength(0)
+
+    // Account switches to user B before 300 ms
+    userId.value = 'user-B'
+
+    // Debounce fires — must write to user-A's path, not user-B's
+    vi.runAllTimers()
+    await flush()
+
+    expect(writes).toHaveLength(1)
+    expect(writes[0].uid).toContain('user-A')
+    expect(writes[0].uid).not.toContain('user-B')
+  })
+})
+
+// ── Logout / user-switch cleanup tests ───────────────────────────────────────
+
+describe('useSubscriptions — logout cleanup', () => {
+  it('clears subscriptionErrors when userId becomes empty', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false }) as Response))
+
+    const userId = ref('user-X')
+    const accessToken = ref('tok')
+    const { subscriptionErrors } = useSubscriptions(() => userId.value, () => accessToken.value)
+
+    await flush()
+
+    // Inject an error directly (simulates a failed fetchOne)
+    subscriptionErrors.value = { 'sub-1': 'HTTP 404' }
+
+    // Log out
+    userId.value = ''
+    await flush()
+
+    expect(subscriptionErrors.value).toEqual({})
+  })
 })

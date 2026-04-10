@@ -113,11 +113,14 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     // Debounce server writes: rapid successive changes cancel the previous
     // pending write so only the latest snapshot reaches the server.
     if (writeTimer !== null) clearTimeout(writeTimer)
+    // Snapshot both uid and data at schedule time so a user switch before the
+    // timer fires cannot redirect the write to a different account.
+    const snapshotUid = userId()
+    const snapshotSubs = [...subscriptions.value]
     writeTimer = setTimeout(() => {
       writeTimer = null
-      const currentUid = userId()
       const currentToken = accessToken()
-      if (currentUid && currentToken) saveToServer(currentUid, currentToken, subscriptions.value)
+      if (snapshotUid && currentToken) saveToServer(snapshotUid, currentToken, snapshotSubs)
     }, 300)
   }
 
@@ -196,6 +199,7 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     if (!uid) {
       subscriptions.value = []
       subscriptionEvents.value = []
+      subscriptionErrors.value = {}
       return
     }
     if (uid !== oldUid || (token && !oldToken)) {
