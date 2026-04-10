@@ -51,7 +51,7 @@ async function loadFromServer(userId: string, accessToken: string): Promise<IcsS
   }
 }
 
-async function saveToServer(userId: string, accessToken: string, subs: IcsSubscription[]): Promise<void> {
+async function saveToServer(userId: string, accessToken: string, subs: IcsSubscription[]): Promise<boolean> {
   try {
     const url = webdavUrl(userId)
     let res = await fetch(url, {
@@ -77,8 +77,10 @@ async function saveToServer(userId: string, accessToken: string, subs: IcsSubscr
         body: JSON.stringify(subs),
       })
     }
+    return res.ok
   } catch {
     // Server save failure is non-fatal — localStorage cache remains valid.
+    return false
   }
 }
 
@@ -113,10 +115,13 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
     if (serverSubs !== null) {
       if (tokenJustArrived && locallyModified) {
         // Local state is newer than the server copy — push it up instead of
-        // overwriting the user's offline changes.
-        saveToServer(uid, token, subscriptions.value)
+        // overwriting the user's offline changes. Only clear the flag when the
+        // push is confirmed; a failed write must keep locallyModified = true so
+        // the next reload retries rather than accepting the stale server copy.
+        const ok = await saveToServer(uid, token, subscriptions.value)
+        if (mySession !== session) return
         saveToStorage(uid, subscriptions.value)
-        locallyModified = false
+        if (ok) locallyModified = false
       } else {
         subscriptions.value = serverSubs
         // Keep local cache in sync.
@@ -151,8 +156,9 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
       writeTimer = null
       const currentToken = accessToken()
       if (snapshotUid && currentToken) {
-        saveToServer(snapshotUid, currentToken, snapshotSubs)
-        locallyModified = false
+        saveToServer(snapshotUid, currentToken, snapshotSubs).then(ok => {
+          if (ok) locallyModified = false
+        })
       }
     }, 300)
   }

@@ -117,6 +117,31 @@ describe('useSubscriptions — accessToken timing', () => {
     const saved = JSON.parse(putBodies[0]) as { url: string }[]
     expect(saved[0].url).toBe(localSub.url)
   })
+
+  it('keeps locallyModified when the late-token push fails, so next reload retries', async () => {
+    const serverSubs = [{ id: 'srv-old', url: 'http://old.ics', name: 'Old', color: '#888', enabled: true }]
+    const localSub  = { id: 'local-2', url: 'http://new2.ics', name: 'New2', color: '#0f0', enabled: true }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return { ok: false, status: 500 } as Response
+      if (String(url).includes('subscriptions.json')) return { ok: true, json: async () => serverSubs } as Response
+      return { ok: false } as Response
+    }))
+
+    const { accessToken, subscriptions, addSubscription } = makeSubs('user-fail', '')
+
+    await flush()
+    addSubscription(localSub.url, localSub.name, localSub.color)
+    await flush()
+
+    // Token arrives — push attempt fails (PUT returns 500)
+    accessToken.value = 'tok-fail'
+    await flush()
+
+    // Local sub must still be in memory (not overwritten by old server copy)
+    expect(subscriptions.value).toHaveLength(1)
+    expect(subscriptions.value[0].url).toBe(localSub.url)
+  })
 })
 
 // ── Write-ordering / debounce tests ───────────────────────────────────────────
