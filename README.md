@@ -21,6 +21,8 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 - **Dark mode support** — follows the OpenCloud theme
 - **Secure token management** — app tokens are cached in `localStorage` (24 h TTL), deduplicated across tabs, and refreshed automatically on expiry
 
+![Agenda App](docs/screenshot.png)
+
 > [!WARNING]
 > **Back up your Radicale data before installing or upgrading.**  
 > This app reads and writes calendar data directly via CalDAV. While it has been tested carefully, no software is free of bugs. A backup of your Radicale data directory ensures you can recover your calendars if anything goes wrong.
