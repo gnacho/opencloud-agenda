@@ -33,18 +33,13 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 
 ### Option A: Download the release zip (recommended)
 
-1. Download the latest release (replace `v1.4.0` with the current version):
-
-```bash
-curl -L -o agenda-v1.4.0.zip \
-  https://forgejo.linux-nerds.org/frank/opencloud-agenda/releases/download/v1.4.0/agenda-v1.4.0.zip
-```
-
-2. Unzip into your OpenCloud web assets directory:
+1. Download and unzip the latest release (replace `v1.4.0` with the current version):
 
 ```bash
 cd <opencloud-data>/web/assets/apps/
-unzip ~/agenda-v1.4.0.zip
+curl -L -O https://forgejo.linux-nerds.org/frank/opencloud-agenda/releases/download/v1.4.0/agenda-v1.4.0.zip
+unzip agenda-v1.4.0.zip
+rm agenda-v1.4.0.zip
 ```
 
 This creates an `agenda/` folder containing the app files.
