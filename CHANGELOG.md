@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2026-04-11
+
+### Changed
+- README: added zip-based installation as recommended option (with curl, chown, and restart steps)
+- README: fixed app registration docs — manifest.json is sufficient, no config.json edits needed
+- README: added Radicale backup warning
+- README: added screenshot
+
 ## [1.4.0] - 2026-04-10
 
 ### Fixed
