@@ -28,45 +28,48 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 ## Requirements
 
 - OpenCloud 6.x with Radicale enabled (CalDAV at `/caldav/`)
-- Node.js 18+ and [pnpm](https://pnpm.io/)
 
 ## Installation
 
-### 1. Clone the repository
+### Option A: Download the release zip (recommended)
+
+1. Download the latest `agenda-v*.zip` from the [Releases](https://forgejo.linux-nerds.org/frank/opencloud-agenda/releases) page.
+
+2. Unzip into your OpenCloud web assets directory:
+
+```bash
+cd <opencloud-data>/web/assets/apps/
+unzip agenda-v*.zip
+```
+
+This creates an `agenda/` folder containing the app files.
+
+3. Restart OpenCloud:
+
+```bash
+docker compose restart opencloud
+```
+
+The app registers itself automatically via the included `manifest.json` — no changes to OpenCloud config files required.
+
+### Option B: Build from source
+
+Requirements: Node.js 18+ and [pnpm](https://pnpm.io/)
 
 ```bash
 git clone https://forgejo.linux-nerds.org/frank/opencloud-agenda.git
 cd opencloud-agenda
 pnpm install
-```
-
-### 2. Build
-
-```bash
 pnpm build
 ```
 
-The compiled output is written to `dist/`.
-
-### 3. Deploy to OpenCloud
-
-Copy the contents of `dist/` to your OpenCloud web assets directory:
+Copy the contents of `dist/` to:
 
 ```
 <opencloud-data>/web/assets/apps/agenda/
 ```
 
-Then register the app in your OpenCloud `config.json` by adding an entry to `external_apps`:
-
-```json
-{
-  "id": "agenda",
-  "path": "/apps/agenda/js/remoteEntry-<hash>.mjs",
-  "themeId": "default"
-}
-```
-
-Restart OpenCloud to pick up the new app registration.
+Then restart OpenCloud.
 
 ## Development
 
