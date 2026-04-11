@@ -44,7 +44,13 @@ unzip agenda-v*.zip
 
 This creates an `agenda/` folder containing the app files.
 
-3. Restart OpenCloud:
+3. Fix ownership if you unzipped as root (replace `dockeruser` with your OpenCloud service user):
+
+```bash
+chown -R dockeruser:dockeruser <opencloud-data>/web/assets/apps/agenda
+```
+
+4. Restart OpenCloud:
 
 ```bash
 docker compose restart opencloud
