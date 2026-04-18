@@ -34,9 +34,9 @@ jobs:
 
       - name: Package zip
         run: |
-          mkdir -p _pkg/agenda
-          cp -r dist/* _pkg/agenda/
-          cd _pkg && zip -r ../agenda-${{ github.ref_name }}.zip agenda/
+          mkdir -p _pkg/opencloud-agenda
+          cp -r dist/* _pkg/opencloud-agenda/
+          cd _pkg && zip -r ../agenda-${{ github.ref_name }}.zip opencloud-agenda/
 
       - name: Create release and upload asset
         env:

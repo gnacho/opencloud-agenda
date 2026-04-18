@@ -1,4 +1,5 @@
 import ICAL from 'ical.js'
+import { PRODID } from '@/constants'
 
 export interface CalendarEvent {
   uid: string
@@ -65,7 +66,7 @@ export function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): s
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//opencloud-agenda//EN',
+    `PRODID:${PRODID}`,
     'BEGIN:VEVENT',
     `UID:${event.seriesUid ?? event.uid}`,
     `DTSTAMP:${fmtUtc(new Date())}`,

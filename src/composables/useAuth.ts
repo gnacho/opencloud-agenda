@@ -1,10 +1,11 @@
 import { computed } from 'vue'
 import { useAuthStore, useUserStore, useConfigStore } from '@opencloud-eu/web-pkg'
+import { TOKEN_LABEL, TOKEN_STORAGE_PREFIX } from '@/constants'
 
 // Token is stored in localStorage keyed by user UUID so it persists across
 // tabs and page reloads and is not recreated unnecessarily.
 const EXPIRY = '24h'
-const STORAGE_PREFIX = 'oc-agenda-token:'
+const STORAGE_PREFIX = TOKEN_STORAGE_PREFIX
 
 interface StoredToken {
   token: string
@@ -78,7 +79,7 @@ export function useAuth() {
           const now = new Date()
           await Promise.all(
             tokens
-              .filter(t => t.label === 'agenda' && new Date(t.expiration_date) <= now)
+              .filter(t => t.label === TOKEN_LABEL && new Date(t.expiration_date) <= now)
               .map(t => fetch(`/auth-app/tokens?token=${encodeURIComponent(t.token)}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${accessToken.value}` },
@@ -89,7 +90,7 @@ export function useAuth() {
         // Cleanup failure is non-fatal — proceed to create a new token.
       }
 
-      const res = await fetch(`/auth-app/tokens?expiry=${EXPIRY}&label=agenda`, {
+      const res = await fetch(`/auth-app/tokens?expiry=${EXPIRY}&label=${TOKEN_LABEL}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken.value}` },
       })

@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { parseEvents, type CalendarEvent } from '@/services/caldav'
+import { SUBSCRIPTIONS_STORAGE_PREFIX, SUBSCRIPTIONS_WEBDAV_DIR } from '@/constants'
 
 export interface IcsSubscription {
   id: string
@@ -10,8 +11,8 @@ export interface IcsSubscription {
   enabled: boolean
 }
 
-const STORAGE_KEY_PREFIX = 'agenda_subscriptions_'
-const WEBDAV_DIR = '.agenda'
+const STORAGE_KEY_PREFIX = SUBSCRIPTIONS_STORAGE_PREFIX
+const WEBDAV_DIR = SUBSCRIPTIONS_WEBDAV_DIR
 const WEBDAV_FILE = 'subscriptions.json'
 
 // ── localStorage (cache / offline fallback) ───────────────────────────────────
