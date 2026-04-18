@@ -122,7 +122,7 @@
 <script setup lang="ts">
 defineEmits<{ (e: 'close'): void }>()
 const de = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('de')
-const version = '1.4.1'
+const version = '2.0.0'
 </script>
 
 <style scoped>

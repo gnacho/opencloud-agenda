@@ -39,9 +39,9 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 
 ```bash
 cd <opencloud-data>/web/assets/apps/
-curl -L -O https://forgejo.linux-nerds.org/frank/opencloud-agenda/releases/download/v1.4.0/agenda-v1.4.0.zip
-unzip agenda-v1.4.0.zip
-rm agenda-v1.4.0.zip
+curl -L -O https://forgejo.linux-nerds.org/frank/opencloud-agenda/releases/download/v2.0.0/agenda-v2.0.0.zip
+unzip agenda-v2.0.0.zip
+rm agenda-v2.0.0.zip
 ```
 
 This creates an `agenda/` folder containing the app files.
@@ -49,7 +49,7 @@ This creates an `agenda/` folder containing the app files.
 3. Fix ownership if you unzipped as root (replace `dockeruser` with your OpenCloud service user):
 
 ```bash
-chown -R dockeruser:dockeruser <opencloud-data>/web/assets/apps/agenda
+chown -R dockeruser:dockeruser <opencloud-data>/web/assets/apps/opencloud-agenda
 ```
 
 4. Restart OpenCloud:
@@ -74,7 +74,7 @@ pnpm build
 Copy the contents of `dist/` to:
 
 ```
-<opencloud-data>/web/assets/apps/agenda/
+<opencloud-data>/web/assets/apps/opencloud-agenda/
 ```
 
 Then restart OpenCloud.
