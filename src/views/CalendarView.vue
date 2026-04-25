@@ -315,6 +315,7 @@ const calendarOptions = computed<CalendarOptions>(() => ({
   views: {
     listWeek: { buttonText: t('list') },
   },
+  dayMaxEvents: true,
   selectable: true,
   editable: true,
   eventResizableFromStart: true,
@@ -786,4 +787,17 @@ watch(calendars, () => {
 :deep(.fc-icon-minus::before) { content: '−' !important; }
 :deep(.fc-icon-plus::before)  { content: '+' !important; }
 :deep(.fc-icon-x::before)     { content: '×' !important; }
+
+/* "+N more" popover — dark mode */
+@media (prefers-color-scheme: dark) {
+  :deep(.fc-popover) {
+    background: #2a2a2a;
+    border-color: #3a3a3a;
+    color: var(--oc-color-text-default);
+  }
+  :deep(.fc-popover-header) {
+    background: #333;
+    color: var(--oc-color-text-default);
+  }
+}
 </style>
