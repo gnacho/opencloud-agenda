@@ -42,17 +42,31 @@ const emit = defineEmits<{
 const form = reactive({ url: '', name: '', color: '#e67e22' })
 const error = ref('')
 
-const canSave = computed(() => form.url.trim().startsWith('http') && form.name.trim().length > 0)
+const canSave = computed(() => {
+  const u = form.url.trim()
+  return (u.startsWith('http') || u.startsWith('webcal://')) && form.name.trim().length > 0
+})
+
+function normalizeUrl(raw: string): string {
+  let url = raw.trim()
+  if (url.startsWith('webcal://')) url = 'https://' + url.slice('webcal://'.length)
+  try {
+    const cid = new URL(url).searchParams.get('cid')
+    if (cid) url = cid
+  } catch { /* leave as-is */ }
+  return url
+}
 
 function submit() {
   error.value = ''
+  const normalized = normalizeUrl(form.url)
   try {
-    new URL(form.url.trim())
+    new URL(normalized)
   } catch {
     error.value = 'Please enter a valid URL.'
     return
   }
-  emit('add', form.url.trim(), form.name.trim(), form.color)
+  emit('add', normalized, form.name.trim(), form.color)
   emit('close')
 }
 </script>
