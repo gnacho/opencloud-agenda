@@ -15,7 +15,7 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 - **CalDAV sync** — compatible with Thunderbird, DAVx⁵ and other CalDAV clients; Thunderbird-created recurring events are correctly expanded and editable
 - **Calendar management** — create calendars with custom colors, rename by double-click, show/hide per calendar
 - **Move events between calendars** — change the calendar in the edit dialog
-- **iCal subscriptions** — add external `.ics` calendars (public holidays, team calendars) as read-only feeds; fetched via a built-in CORS proxy. Accepts plain `.ics` URLs, `webcal://` links, and Google Calendar "Add to Calendar" links (`?cid=…`) — the correct ICS URL is extracted automatically
+- **iCal subscriptions** *(experimental, requires additional server setup — see below)* — add external `.ics` calendars (public holidays, team calendars) as read-only feeds. Accepts plain `.ics` URLs, `webcal://` links, and Google Calendar "Add to Calendar" links (`?cid=…`)
 - **Event overflow** — month view caps events per cell and shows a "+N more" link; clicking opens a popover with all events for that day
 - **Manual refresh** — ↻ button in the sidebar reloads all data and subscriptions from the server on demand
 - **Bilingual UI** — English and German, based on the browser/OpenCloud language setting
@@ -108,6 +108,119 @@ Refer to the [OpenCloud web-app-skeleton](https://github.com/opencloud-eu/web-ap
 - Recurring events are expanded client-side by ical.js (±2 years). Editing a recurring event uses GET → patch → PUT to preserve the RRULE and all other ICS properties.
 - All ICS text values are RFC 5545-escaped; CalDAV XML payloads use proper XML entity escaping.
 - ICS subscriptions are fetched server-side via a small Node.js proxy (`/ics-proxy/`) to avoid browser CORS restrictions. The proxy validates the user's Bearer token against OpenCloud before forwarding the request.
+
+## Optional: iCal Subscriptions (Experimental)
+
+> [!NOTE]
+> This feature requires a small server-side proxy service. The base app works without it — subscriptions are simply not available unless the proxy is set up.
+
+External `.ics` feeds cannot be fetched directly from the browser due to CORS restrictions. A lightweight Node.js proxy service handles this server-side.
+
+### 1. Create the proxy script
+
+Create a directory `ics-proxy/` next to your `docker-compose.yml` with two files:
+
+**`ics-proxy/package.json`**
+```json
+{
+  "name": "ics-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js"
+}
+```
+
+**`ics-proxy/server.js`**
+```js
+import http from 'http'
+
+const PORT = 3000
+const PATH_PREFIX = '/ics-proxy/'
+const OC_USER_URL = 'http://opencloud:9200/ocs/v2.php/cloud/user'
+
+async function isAuthenticated(authHeader) {
+  if (!authHeader) return false
+  return new Promise((resolve) => {
+    const req = http.get(OC_USER_URL, {
+      headers: { Authorization: authHeader, 'OCS-APIRequest': 'true' }
+    }, (res) => resolve(res.statusCode === 200))
+    req.on('error', () => resolve(false))
+    req.setTimeout(3000, () => { req.destroy(); resolve(false) })
+  })
+}
+
+http.createServer(async (req, res) => {
+  if (!req.url.startsWith(PATH_PREFIX)) {
+    res.writeHead(404); res.end('Not found'); return
+  }
+  if (!await isAuthenticated(req.headers['authorization'])) {
+    res.writeHead(401, { 'WWW-Authenticate': 'Bearer' })
+    res.end('Unauthorized')
+    return
+  }
+  const targetUrl = decodeURIComponent(req.url.slice(PATH_PREFIX.length))
+  let parsed
+  try { parsed = new URL(targetUrl) } catch {
+    res.writeHead(400); res.end('Invalid URL'); return
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    res.writeHead(400); res.end('Only http/https allowed'); return
+  }
+  try {
+    const upstream = await fetch(targetUrl, {
+      headers: { 'User-Agent': 'opencloud-agenda-ics-proxy/1.0' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10000),
+    })
+    const body = await upstream.arrayBuffer()
+    res.writeHead(upstream.status, {
+      'Content-Type': upstream.headers.get('content-type') || 'text/calendar; charset=utf-8',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET',
+      'Cache-Control': 'max-age=3600',
+    })
+    res.end(Buffer.from(body))
+  } catch (err) {
+    res.writeHead(502); res.end('Upstream error: ' + err.message)
+  }
+}).listen(PORT, () => console.log('ICS proxy listening on port ' + PORT))
+```
+
+### 2. Add the service to docker-compose.yml
+
+```yaml
+services:
+  # ... your existing services ...
+
+  ics-proxy:
+    image: node:20-alpine
+    restart: always
+    working_dir: /app
+    command: node server.js
+    volumes:
+      - ./ics-proxy:/app
+    networks:
+      - opencloud-net
+```
+
+### 3. Add the route to proxy.yaml
+
+Add the following entry to the `routes:` list in `config/opencloud/proxy.yaml`:
+
+```yaml
+- endpoint: /ics-proxy/
+  backend: http://ics-proxy:3000
+  unprotected: true
+```
+
+### 4. Apply the changes
+
+```bash
+docker compose up -d ics-proxy
+docker compose restart opencloud
+```
+
+The proxy validates every request against OpenCloud's user endpoint before forwarding, so only authenticated users can fetch external calendars.
 
 ## License
 
