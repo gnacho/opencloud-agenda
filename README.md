@@ -15,7 +15,8 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 - **CalDAV sync** — compatible with Thunderbird, DAVx⁵ and other CalDAV clients; Thunderbird-created recurring events are correctly expanded and editable
 - **Calendar management** — create calendars with custom colors, rename by double-click, show/hide per calendar
 - **Move events between calendars** — change the calendar in the edit dialog
-- **iCal subscriptions** — add external `.ics` calendars (public holidays, team calendars) as read-only feeds; fetched via a built-in CORS proxy
+- **iCal subscriptions** — add external `.ics` calendars (public holidays, team calendars) as read-only feeds; fetched via a built-in CORS proxy. Accepts plain `.ics` URLs, `webcal://` links, and Google Calendar "Add to Calendar" links (`?cid=…`) — the correct ICS URL is extracted automatically
+- **Event overflow** — month view caps events per cell and shows a "+N more" link; clicking opens a popover with all events for that day
 - **Manual refresh** — ↻ button in the sidebar reloads all data and subscriptions from the server on demand
 - **Bilingual UI** — English and German, based on the browser/OpenCloud language setting
 - **Dark mode support** — follows the OpenCloud theme
@@ -106,6 +107,7 @@ Refer to the [OpenCloud web-app-skeleton](https://github.com/opencloud-eu/web-ap
 - FullCalendar icon fonts are replaced with Unicode characters to comply with the OpenCloud Content Security Policy (`font-src 'self'` — no `data:` URIs allowed).
 - Recurring events are expanded client-side by ical.js (±2 years). Editing a recurring event uses GET → patch → PUT to preserve the RRULE and all other ICS properties.
 - All ICS text values are RFC 5545-escaped; CalDAV XML payloads use proper XML entity escaping.
+- ICS subscriptions are fetched server-side via a small Node.js proxy (`/ics-proxy/`) to avoid browser CORS restrictions. The proxy validates the user's Bearer token against OpenCloud before forwarding the request.
 
 ## License
 
