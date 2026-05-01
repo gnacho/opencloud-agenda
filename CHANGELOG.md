@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-05-01
+
+### Added
+- **Event overflow in month view** — cells cap at the available height and show a "+N more" link; clicking opens a popover with all events for that day
+- **Subscription URL normalization** — the subscription dialog now accepts `webcal://` links (converted to `https://`) and Google Calendar "Add to Calendar" URLs (`?cid=…`); the correct ICS URL is extracted automatically
+
+### Fixed
+- Dark mode: the "+N more" day popover now has a proper dark background and readable text
+- Subscriptions: `fetchOne()` now discards results if the subscription was deleted or disabled while the feed was loading (stale-write guard)
+- Recurring events: drag/drop and resize now immediately reflect the new times on all occurrences in the local state instead of waiting for a full reload
+- `patchRecurringEvent()`: passing `fields.rrule = undefined` no longer removes the RRULE; only an explicit empty string triggers removal
+- `src/manifest.json` version was out of sync with `package.json` — both now consistently track the release version
+
+### Documentation
+- iCal subscriptions marked as experimental in feature list
+- New "Optional: iCal Subscriptions (Experimental)" section with full setup guide for the Node.js proxy Docker service
+
 ## [2.0.0] - 2026-04-11
 
 ### Changed
