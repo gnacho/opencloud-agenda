@@ -208,6 +208,8 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const icsText = await res.text()
       if (mySession !== session) return  // user switched or logged out while fetching
+      const current = subscriptions.value.find(s => s.id === sub.id)
+      if (!current || !current.enabled) return  // subscription was deleted or disabled while fetching
       // parseEvents uses a placeholder href since subscriptions have no CalDAV href
       const parsed = parseEvents(icsText, sub.url)
       // prefix all UIDs to avoid collisions with CalDAV events

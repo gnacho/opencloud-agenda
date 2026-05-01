@@ -148,10 +148,22 @@ export function useCalendar() {
         allDay: event.allDay,
         rrule: event.rrule,
       })
-      // Update all occurrences of this series in local state.
+      // Apply time deltas so drag/resize is reflected immediately without a reload.
+      const startDelta = original ? event.start.getTime() - original.start.getTime() : 0
+      const endDelta = original ? event.end.getTime() - original.end.getTime() : 0
       events.value = events.value.map(e =>
         e.seriesUid === event.seriesUid
-          ? { ...e, title: event.title, description: event.description, location: event.location, etag: newEtag ?? e.etag }
+          ? {
+              ...e,
+              title: event.title,
+              description: event.description,
+              location: event.location,
+              allDay: event.allDay,
+              rrule: event.rrule,
+              start: new Date(e.start.getTime() + startDelta),
+              end: new Date(e.end.getTime() + endDelta),
+              etag: newEtag ?? e.etag,
+            }
           : e
       )
     } else {

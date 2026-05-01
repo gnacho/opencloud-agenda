@@ -361,9 +361,10 @@ export class CalDavClient {
 
     if (fields.rrule) {
       vevent.updatePropertyWithValue('rrule', ICAL.Recur.fromString(fields.rrule))
-    } else if (fields.rrule === undefined || fields.rrule === '') {
+    } else if (fields.rrule === '') {
       vevent.removeProperty('rrule')
     }
+    // fields.rrule === undefined → leave RRULE unchanged
 
     const modifiedIcs = comp.toString()
     const putRes = await this.request('PUT', href, modifiedIcs)
