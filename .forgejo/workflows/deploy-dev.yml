@@ -1,0 +1,56 @@
+name: Deploy Dev
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build & Deploy to Test Server
+    runs-on: docker
+    container:
+      image: node:20-alpine
+
+    steps:
+      - name: Install system deps
+        run: apk add --no-cache git openssh-client rsync
+
+      - name: Checkout
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${GITHUB_TOKEN}@${GITHUB_SERVER_URL#https://}/${{ github.repository }}.git" .
+          git checkout ${{ github.ref }}
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H cloud.linux-nerds.org >> ~/.ssh/known_hosts
+
+      - name: Upload dist/
+        run: |
+          rsync -av --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
+            dist/ \
+            root@cloud.linux-nerds.org:/mnt/HC_Volume_103940066/opencloud_keycloak_data/data/web/assets/apps/opencloud-agenda/
+
+      - name: Restart containers
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes root@cloud.linux-nerds.org \
+            "cd /home/dockeruser/opencloud-compose-keycloak && \
+             sudo -u dockeruser docker compose restart opencloud && \
+             sleep 3 && \
+             sudo -u dockeruser docker compose restart traefik"
+
+      - name: Done
+        run: echo "Deploy fertig. https://cloud.linux-nerds.org/apps/opencloud-agenda/"
