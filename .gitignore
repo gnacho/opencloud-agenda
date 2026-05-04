@@ -3,4 +3,3 @@ dist/
 .__mf__temp/
 .cache/
 *.local
-deploy.sh
