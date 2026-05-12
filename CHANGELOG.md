@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-05-12
+
+### Added
+- **Subscription error notifications** — fetch errors (e.g. HTTP 410) are now shown as a dismissible notification toast instead of plain text in the sidebar; error messages include a human-readable reason per HTTP status code
+
+### Fixed
+- App version in the help dialog is now read directly from `package.json` at build time — no more manual version strings
+
+### CI/CD
+- New `deploy-dev.yml` workflow for manual test deployments from Forgejo UI (no tag required)
+
 ## [2.1.0] - 2026-05-01
 
 ### Added
