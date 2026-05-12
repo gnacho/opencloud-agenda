@@ -177,7 +177,7 @@ const {
 } = useSubscriptions(
   () => userId.value,
   () => accessToken.value,
-  (name, msg) => showErrorMessage({ title: `${name}: ${msg}` }),
+  (name, msg, url) => showErrorMessage({ title: `Kalender-Fehler: ${name}`, desc: `${msg}\n${url}`, timeout: 10000 }),
 )
 
 const subscriptionDialogOpen = ref(false)

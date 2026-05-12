@@ -90,7 +90,7 @@ async function saveToServer(userId: string, accessToken: string, subs: IcsSubscr
 export function useSubscriptions(
   userId: () => string,
   accessToken: () => string,
-  onError?: (name: string, message: string) => void,
+  onError?: (name: string, message: string, url: string) => void,
 ) {
   const subscriptions = ref<IcsSubscription[]>([])
   const subscriptionEvents = ref<CalendarEvent[]>([])
@@ -209,7 +209,20 @@ export function useSubscriptions(
       const res = await fetch(proxyUrl(sub.url), {
         headers: accessToken() ? { Authorization: `Bearer ${accessToken()}` } : {},
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) {
+        const reasons: Record<number, string> = {
+          400: 'Ungültige Anfrage',
+          401: 'Zugriff verweigert (Anmeldung erforderlich)',
+          403: 'Zugriff verweigert',
+          404: 'Kalender nicht gefunden',
+          410: 'Kalender wurde permanent entfernt',
+          429: 'Zu viele Anfragen – bitte später versuchen',
+          500: 'Server-Fehler',
+          503: 'Dienst nicht verfügbar',
+        }
+        const reason = reasons[res.status] ?? `Unbekannter Fehler`
+        throw new Error(`HTTP ${res.status} – ${reason}`)
+      }
       const icsText = await res.text()
       if (mySession !== session) return  // user switched or logged out while fetching
       const current = subscriptions.value.find(s => s.id === sub.id)
@@ -236,7 +249,7 @@ export function useSubscriptions(
       if (mySession !== session) return  // discard errors from a previous session
       const msg = e instanceof Error ? e.message : String(e)
       subscriptionErrors.value = { ...subscriptionErrors.value, [sub.id]: msg }
-      onError?.(sub.name, msg)
+      onError?.(sub.name, msg, sub.url)
     }
   }
 
