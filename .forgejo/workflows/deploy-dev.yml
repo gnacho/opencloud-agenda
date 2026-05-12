@@ -22,7 +22,7 @@ jobs:
           git checkout ${{ github.ref }}
 
       - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@latest --activate
+        run: corepack enable && corepack prepare pnpm@10 --activate
 
       - name: Install packages
         run: pnpm install --frozen-lockfile
