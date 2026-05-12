@@ -165,7 +165,6 @@ const {
 
 // --- subscriptions ---
 const { userId, accessToken } = useAuth()
-const {
 const { showErrorMessage } = useMessages()
 
 const {
