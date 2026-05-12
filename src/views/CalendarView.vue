@@ -174,11 +174,12 @@ const {
   toggleSubscription,
 } = useSubscriptions(() => userId.value, () => accessToken.value)
 
-const { showMessage } = useMessages()
-watch(subscriptionErrors, (errors) => {
+const { showErrorMessage } = useMessages()
+watch(subscriptionErrors, (errors, prev) => {
   for (const [id, msg] of Object.entries(errors)) {
+    if (prev?.[id] === msg) continue
     const name = subscriptions.value.find(s => s.id === id)?.name ?? id
-    showMessage({ title: `${name}: ${msg}`, status: 'danger' })
+    showErrorMessage({ title: `${name}: ${msg}` })
   }
 }, { deep: true })
 
