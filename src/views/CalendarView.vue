@@ -166,22 +166,20 @@ const {
 // --- subscriptions ---
 const { userId, accessToken } = useAuth()
 const {
+const { showErrorMessage } = useMessages()
+
+const {
   subscriptions,
   subscriptionEvents,
   subscriptionErrors,
   addSubscription,
   removeSubscription,
   toggleSubscription,
-} = useSubscriptions(() => userId.value, () => accessToken.value)
-
-const { showErrorMessage } = useMessages()
-watch(subscriptionErrors, (errors, prev) => {
-  for (const [id, msg] of Object.entries(errors)) {
-    if (prev?.[id] === msg) continue
-    const name = subscriptions.value.find(s => s.id === id)?.name ?? id
-    showErrorMessage({ title: `${name}: ${msg}` })
-  }
-}, { deep: true })
+} = useSubscriptions(
+  () => userId.value,
+  () => accessToken.value,
+  (name, msg) => showErrorMessage({ title: `${name}: ${msg}` }),
+)
 
 const subscriptionDialogOpen = ref(false)
 

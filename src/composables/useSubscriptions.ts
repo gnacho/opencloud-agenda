@@ -87,7 +87,11 @@ async function saveToServer(userId: string, accessToken: string, subs: IcsSubscr
 
 // ── composable ────────────────────────────────────────────────────────────────
 
-export function useSubscriptions(userId: () => string, accessToken: () => string) {
+export function useSubscriptions(
+  userId: () => string,
+  accessToken: () => string,
+  onError?: (name: string, message: string) => void,
+) {
   const subscriptions = ref<IcsSubscription[]>([])
   const subscriptionEvents = ref<CalendarEvent[]>([])
   const subscriptionErrors = ref<Record<string, string>>({})
@@ -230,10 +234,9 @@ export function useSubscriptions(userId: () => string, accessToken: () => string
       subscriptionErrors.value = errs
     } catch (e) {
       if (mySession !== session) return  // discard errors from a previous session
-      subscriptionErrors.value = {
-        ...subscriptionErrors.value,
-        [sub.id]: e instanceof Error ? e.message : String(e),
-      }
+      const msg = e instanceof Error ? e.message : String(e)
+      subscriptionErrors.value = { ...subscriptionErrors.value, [sub.id]: msg }
+      onError?.(sub.name, msg)
     }
   }
 
