@@ -68,10 +68,6 @@
         </li>
       </ul>
 
-      <p v-for="(err, id) in subscriptionErrors" :key="id" class="error-msg sub-error">
-        {{ subscriptions.find(s => s.id === id)?.name }}: {{ err }}
-      </p>
-
       <div class="sidebar-footer">
         <button class="help-link" @click="helpOpen = true">? {{ de ? 'Hilfe' : 'Help' }}</button>
       </div>
@@ -142,6 +138,7 @@ import { useCalendar } from '@/composables/useCalendar'
 import { useSubscriptions } from '@/composables/useSubscriptions'
 import { useAuth } from '@/composables/useAuth'
 import { useI18n } from '@/composables/useI18n'
+import { useMessages } from '@opencloud-eu/web-pkg'
 import type { CalendarEvent } from '@/services/caldav'
 
 const { t } = useI18n()
@@ -176,6 +173,14 @@ const {
   removeSubscription,
   toggleSubscription,
 } = useSubscriptions(() => userId.value, () => accessToken.value)
+
+const { showMessage } = useMessages()
+watch(subscriptionErrors, (errors) => {
+  for (const [id, msg] of Object.entries(errors)) {
+    const name = subscriptions.value.find(s => s.id === id)?.name ?? id
+    showMessage({ title: `${name}: ${msg}`, status: 'danger' })
+  }
+}, { deep: true })
 
 const subscriptionDialogOpen = ref(false)
 
