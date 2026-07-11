@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.0] - 2026-07-11
+
+### Added
+- **Recurrence intervals** — the event dialog now has an "Every N days/weeks/months/years" field, enabling biweekly schedules like "every 2 weeks on Friday" (`FREQ=WEEKLY;INTERVAL=2;BYDAY=FR`)
+
+### Fixed
+- Editing an event whose RRULE contained an `INTERVAL` (e.g. created in Thunderbird) no longer silently drops the interval on save
+- `src/manifest.json` version had drifted from `package.json` again (2.1.0 vs 2.2.0) — both set to 2.3.0
+
 ## [2.2.0] - 2026-05-12
 
 ### Added

@@ -14,6 +14,17 @@ describe('parseRrule', () => {
     expect(r.days).toEqual(['MO', 'WE', 'FR'])
   })
 
+  it('defaults interval to 1 when INTERVAL is absent', () => {
+    expect(parseRrule('FREQ=WEEKLY;BYDAY=FR').interval).toBe(1)
+  })
+
+  it('parses INTERVAL (every 2 weeks on Friday)', () => {
+    const r = parseRrule('FREQ=WEEKLY;INTERVAL=2;BYDAY=FR')
+    expect(r.freq).toBe('WEEKLY')
+    expect(r.interval).toBe(2)
+    expect(r.days).toEqual(['FR'])
+  })
+
   it('parses MONTHLY by day-of-month', () => {
     const r = parseRrule('FREQ=MONTHLY')
     expect(r.freq).toBe('MONTHLY')
@@ -69,6 +80,16 @@ describe('buildRrule', () => {
     expect(r).toBe('FREQ=WEEKLY;BYDAY=MO,WE')
   })
 
+  it('builds WEEKLY with INTERVAL=2 (every 2 weeks on Friday)', () => {
+    const r = buildRrule({ freq: 'WEEKLY', interval: 2, days: ['FR'], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    expect(r).toBe('FREQ=WEEKLY;INTERVAL=2;BYDAY=FR')
+  })
+
+  it('omits INTERVAL when it is 1', () => {
+    const r = buildRrule({ freq: 'DAILY', interval: 1, days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
+    expect(r).toBe('FREQ=DAILY')
+  })
+
   it('builds WEEKLY defaulting to start-date weekday when no days selected', () => {
     const r = buildRrule({ freq: 'WEEKLY', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'NEVER', count: 10, until: '', startDate: monday })
     expect(r).toBe('FREQ=WEEKLY;BYDAY=MO')
@@ -111,6 +132,13 @@ describe('buildRrule', () => {
 
   it('roundtrips: parse → build gives equivalent rule', () => {
     const original = 'FREQ=WEEKLY;BYDAY=MO,FR;COUNT=10'
+    const parsed = parseRrule(original)
+    const rebuilt = buildRrule({ ...parsed, startDate: monday })
+    expect(rebuilt).toBe(original)
+  })
+
+  it('roundtrips a biweekly rule without dropping INTERVAL', () => {
+    const original = 'FREQ=WEEKLY;INTERVAL=2;BYDAY=FR'
     const parsed = parseRrule(original)
     const rebuilt = buildRrule({ ...parsed, startDate: monday })
     expect(rebuilt).toBe(original)

@@ -50,6 +50,12 @@
         </select>
       </label>
 
+      <label v-if="form.repeatFreq !== 'NONE'" class="row repeat-interval">
+        {{ t('Every') }}
+        <input type="number" v-model.number="form.repeatInterval" min="1" max="99" class="count-input" />
+        {{ intervalUnitLabel }}
+      </label>
+
       <div v-if="form.repeatFreq === 'MONTHLY'" class="repeat-monthly">
         <label class="row">
           <input type="radio" v-model="form.monthlyType" value="DAYOFMONTH" />
@@ -195,6 +201,7 @@ const form = reactive({
   description: props.event?.description ?? '',
   calendarHref: defaultCalHref,
   repeatFreq: (parsedRrule?.freq ?? 'NONE') as RepeatFreq,
+  repeatInterval: parsedRrule?.interval ?? 1,
   repeatDays: parsedRrule?.days ?? [] as string[],
   monthlyType: (parsedRrule?.monthlyType ?? 'DAYOFMONTH') as 'DAYOFMONTH' | 'NTHWEEKDAY',
   monthlyByday: parsedRrule?.monthlyByday ?? '',
@@ -211,9 +218,15 @@ const autoNthWeekday = computed(() => getNthWeekday(startDateForCalc.value))
 const autoNthWeekdayLabel = computed(() => nthWeekdayLabel(autoNthWeekday.value))
 const autoMonthDay = computed(() => startDateForCalc.value.getDate())
 
+const INTERVAL_UNITS: Record<string, string> = {
+  DAILY: t('day(s)'), WEEKLY: t('week(s)'), MONTHLY: t('month(s)'), YEARLY: t('year(s)'),
+}
+const intervalUnitLabel = computed(() => INTERVAL_UNITS[form.repeatFreq] ?? '')
+
 function buildRrule(): string | undefined {
   return buildRruleUtil({
     freq: form.repeatFreq,
+    interval: form.repeatInterval >= 1 ? form.repeatInterval : 1,
     days: form.repeatDays,
     monthlyType: form.monthlyType,
     monthlyByday: form.monthlyByday,

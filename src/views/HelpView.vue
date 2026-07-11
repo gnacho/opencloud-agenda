@@ -44,6 +44,8 @@
           <li v-else>Recurring events are marked with <strong>↻</strong> in the calendar</li>
           <li v-if="de">Wiederholungsoptionen: täglich · wöchentlich (Wochentage wählbar) · monatlich (am Tag X oder am N-ten Wochentag) · jährlich</li>
           <li v-else>Repeat options: daily · weekly (choose weekdays) · monthly (on day X or the Nth weekday) · yearly</li>
+          <li v-if="de">Mit „Alle N …" lässt sich ein Intervall festlegen, z.&nbsp;B. alle 2 Wochen (14-tägig)</li>
+          <li v-else>Use "Every N …" to set an interval, e.g. every 2 weeks (biweekly)</li>
           <li v-if="de">Ende der Serie: nie · nach N Terminen · bis zu einem Datum</li>
           <li v-else>Series end: never · after N occurrences · until a date</li>
           <li v-if="de">Beim Bearbeiten oder Verschieben eines Serientermins wird immer die <em>gesamte Serie</em> aktualisiert</li>

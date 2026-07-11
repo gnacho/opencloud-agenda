@@ -6,6 +6,7 @@ export const DAY_NAMES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
 
 export interface ParsedRrule {
   freq: RepeatFreq
+  interval: number // 1 = every occurrence, 2 = every 2nd, …
   days: string[]
   monthlyType: MonthlyType
   monthlyByday: string
@@ -22,6 +23,7 @@ export function getNthWeekday(date: Date): string {
 
 export function parseRrule(rrule: string): ParsedRrule {
   const freq = (rrule.match(/FREQ=(\w+)/)?.[1] ?? 'NONE') as RepeatFreq
+  const interval = rrule.match(/INTERVAL=(\d+)/)?.[1]
   const bydayRaw = rrule.match(/BYDAY=([^;]+)/)?.[1] ?? ''
   const isNthWeekday = freq === 'MONTHLY' && /^-?\d+[A-Z]{2}$/.test(bydayRaw)
   const days = !isNthWeekday && bydayRaw ? bydayRaw.split(',') : []
@@ -29,6 +31,7 @@ export function parseRrule(rrule: string): ParsedRrule {
   const until = rrule.match(/UNTIL=(\d{8})/)?.[1]
   return {
     freq,
+    interval: interval ? Math.max(1, parseInt(interval)) : 1,
     days,
     monthlyType: isNthWeekday ? 'NTHWEEKDAY' : 'DAYOFMONTH',
     monthlyByday: isNthWeekday ? bydayRaw : '',
@@ -40,6 +43,7 @@ export function parseRrule(rrule: string): ParsedRrule {
 
 export interface BuildRruleParams {
   freq: RepeatFreq
+  interval?: number // omitted or 1 = every occurrence
   days: string[]
   monthlyType: MonthlyType
   monthlyByday: string // preserved BYDAY for NTHWEEKDAY (e.g. '-1MO', '2TU'); '' means derive from startDate
@@ -52,6 +56,9 @@ export interface BuildRruleParams {
 export function buildRrule(params: BuildRruleParams): string | undefined {
   if (params.freq === 'NONE') return undefined
   let rule = `FREQ=${params.freq}`
+  if ((params.interval ?? 1) > 1) {
+    rule += `;INTERVAL=${Math.floor(params.interval!)}`
+  }
   if (params.freq === 'WEEKLY') {
     const days = params.days.length ? params.days : [DAY_NAMES[params.startDate.getDay()]]
     rule += `;BYDAY=${days.join(',')}`
