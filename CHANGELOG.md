@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.1] - 2026-08-02
+
+### Fixed
+- **An event moved to another calendar kept the old calendar's colour** — and not just on screen: `loadEvents()` copied the calendar's colour onto every event object, and `buildIcs()` persists `CalendarEvent.color` as a `COLOR:` property, so the colour was written into the stored `.ics` on the next save. Reloading then read it back and it won over the calendar's own colour, permanently. The calendar colour is no longer copied onto events, and the view derives it from `calendarHref`, so events always take the colour of the calendar they are in
+- Events whose `.ics` still carries a stale `COLOR:` from an earlier version now display correctly again — the property is ignored for CalDAV events rather than rewritten, so no other client's data is touched
+
+### Changed
+- Language detection consolidated in `useI18n` (`isGerman()`, `localeTag()`) and read at call time; `getFcLocale()` no longer keeps a second copy of the same check
+
+### Tests
+- 3 tests for `useCalendar` pinning that the calendar colour never reaches the event object or the generated ICS, while a `COLOR` set by another client is still preserved
+- 5 tests for language detection
+
 ## [2.4.0] - 2026-08-02
 
 ### Added
