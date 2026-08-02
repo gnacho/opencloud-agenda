@@ -79,9 +79,17 @@ const translations: Record<string, string> = {
   'Please enter a valid URL.': 'Bitte eine gültige URL eingeben.',
 }
 
-function isGerman(): boolean {
+// Must be read at call time, never captured in a module- or setup-level
+// constant: OpenCloud sets documentElement.lang after the extension has been
+// mounted, so anything evaluated during setup() still sees the empty default.
+export function isGerman(): boolean {
   const lang = document.documentElement.lang || navigator.language || ''
   return lang.toLowerCase().startsWith('de')
+}
+
+// BCP 47 tag for Intl formatters.
+export function localeTag(): string {
+  return isGerman() ? 'de-DE' : 'en-US'
 }
 
 export function useI18n() {
@@ -90,5 +98,5 @@ export function useI18n() {
     return key
   }
 
-  return { t }
+  return { t, isGerman, localeTag }
 }

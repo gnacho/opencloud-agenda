@@ -142,8 +142,10 @@ import { useMessages } from '@opencloud-eu/web-pkg'
 import type { CalendarEvent } from '@/services/caldav'
 import { addDays, formatEventRange } from '@/utils/eventFormat'
 
-const { t } = useI18n()
-const de = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('de')
+const { t, isGerman, localeTag } = useI18n()
+// Computed, not a constant: OpenCloud sets documentElement.lang only after the
+// extension is mounted, so a setup-time read is still empty here.
+const de = computed(() => isGerman())
 const helpOpen = ref(false)
 
 const {
@@ -253,8 +255,11 @@ const fcEvents = computed(() => {
       start: e.start,
       end: e.end,
       allDay: e.allDay,
-      backgroundColor: e.color ?? activeCalColor(e.calendarHref),
-      borderColor: e.color ?? activeCalColor(e.calendarHref),
+      // Always the calendar's colour: a per-event COLOR is not a feature this
+      // app offers, and stale ones left in .ics files by earlier versions would
+      // otherwise override the calendar the event now lives in.
+      backgroundColor: activeCalColor(e.calendarHref),
+      borderColor: activeCalColor(e.calendarHref),
       extendedProps: { event: e, readonly: false },
     }))
 
@@ -282,7 +287,6 @@ function activeCalColor(href: string): string {
 // no dialog to open. The tooltip is the only way to read the full entry there.
 
 const DESC_LIMIT = 400
-const tooltipLocale = de ? 'de-DE' : 'en-US'
 
 let tooltipEl: HTMLDivElement | null = null
 
@@ -311,7 +315,7 @@ function fillTooltip(ev: CalendarEvent) {
     el.appendChild(line)
   }
   addLine(ev.title, 'tt-title')
-  addLine(formatEventRange(ev, tooltipLocale), 'tt-time')
+  addLine(formatEventRange(ev, localeTag()), 'tt-time')
   addLine(ev.location, 'tt-location')
   addLine(ev.description, 'tt-desc')
 }
@@ -354,8 +358,7 @@ function getInitialView(): string {
 
 // detect language for FC locale
 function getFcLocale() {
-  const lang = document.documentElement.lang || navigator.language || ''
-  return lang.toLowerCase().startsWith('de') ? deLocale : 'en'
+  return isGerman() ? deLocale : 'en'
 }
 
 // current range being displayed — re-fetch when it changes
