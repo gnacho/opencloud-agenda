@@ -85,10 +85,13 @@ export function useCalendar() {
       const c = await getClient()
       const all: CalendarEvent[] = []
       for (const cal of calendars.value) {
+        // The calendar colour is deliberately NOT copied onto the event here.
+        // CalendarEvent.color is persisted as a COLOR property by buildIcs, so
+        // baking it in wrote the calendar's colour into the stored .ics file —
+        // after which the event kept that colour even when moved to a calendar
+        // of a different colour. The view derives the colour from calendarHref.
         const evs = await c.fetchEvents(cal.href, from, to)
-        // attach calendar color for display
-        const color = cal.color
-        all.push(...evs.map(e => ({ ...e, color: e.color ?? color })))
+        all.push(...evs)
       }
       // epoch-guard: discard if a newer load finished first
       if (epoch < lastEpoch) return
