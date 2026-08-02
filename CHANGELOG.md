@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.0] - 2026-08-02
+
+### Added
+- **Hover tooltip for events** — hovering any entry shows title, full date/time range, location and description. Subscription events are read-only and open no dialog, so in month view (where titles are truncated) this was previously the missing piece: a Bundesliga fixture showed as "1. FC Union Berl…" with no way to see the opponent
+
+### Fixed
+- **All-day events lost a day across the spring DST change** — `EventDialog` displayed the inclusive end date by subtracting 24 h in milliseconds, but a local day is only 23 h long on the spring-forward date. `parseDates()` already added the day back with correct calendar arithmetic, so the asymmetry silently shortened any all-day event spanning that date on save. Day arithmetic is now centralised in `addDays()` (`src/utils/eventFormat.ts`) and used by the dialog, the tooltip and the drag-select handler
+- **Subscriptions failed silently when the ICS proxy was misrouted** — an unconfigured `/ics-proxy/` route falls through to the OpenCloud web SPA, which answers HTTP 200 with `index.html`. The status check passed, `ICAL.parse()` threw, and `parseEvents()` swallowed it into an empty array, so the subscription appeared healthy but empty. Feed responses are now validated for a `BEGIN:VCALENDAR` prelude and surface a distinct error in the notification toast
+
+### Security
+- **ICS proxy: SSRF** — the documented `server.js` fetched any user-supplied URL from inside the Docker network, exposing internal services (`opencloud:9200`, `keycloak:8080`) and the cloud metadata endpoint (`169.254.169.254`) to any authenticated user. Target hostnames are now resolved and rejected if any answer is a private, loopback, link-local, CGNAT or reserved address, re-checked after every redirect (redirects are followed manually, since `redirect: 'follow'` bypassed the guard)
+- **ICS proxy: remote crash** — `decodeURIComponent()` sat outside the try block, so a request to `/ics-proxy/%ZZ` raised an uncaught `URIError` and killed the process
+- **ICS proxy: response-type passthrough** — the upstream `Content-Type` was echoed, allowing HTML to be served from the OpenCloud origin. Responses are now pinned to `text/calendar` with `nosniff`, a `default-src 'none'; sandbox` CSP and `Content-Disposition: attachment`
+- **ICS proxy: unbounded buffering** — responses were read whole via `arrayBuffer()`. Bodies are now streamed with a 10 MB cap
+- Proxy container hardened: non-root user, read-only filesystem, `cap_drop: ALL`, `no-new-privileges`, memory and PID limits, plus a Traefik rate-limit middleware
+
+### Changed
+- **ICS proxy setup reworked** — the proxy now lives in its own directory and Compose project outside the OpenCloud compose tree, routed via Traefik labels instead of an entry in `config/opencloud/proxy.yaml`. Updating or rebuilding OpenCloud no longer removes the route
+
+### Tests
+- 4 tests for feed content validation: SPA-fallback HTML, non-iCalendar bodies, valid feeds, and feeds prefixed with a UTF-8 BOM
+- 16 tests for `eventFormat` covering day arithmetic across both DST boundaries, month/year rollover, and all-day vs. timed range formatting
+- `vitest.config.ts` pins `TZ=Europe/Berlin`, without which the DST cases pass vacuously in CI
+
 ## [2.3.0] - 2026-07-11
 
 ### Added
