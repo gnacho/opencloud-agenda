@@ -121,9 +121,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import FullCalendar from '@fullcalendar/vue3'
-import type { CalendarOptions, EventClickArg, DateSelectArg, DatesSetArg, EventDropArg } from '@fullcalendar/core'
+import type { CalendarOptions, EventClickArg, DateSelectArg, DatesSetArg, EventDropArg, EventMountArg } from '@fullcalendar/core'
 import type { EventResizeDoneArg } from '@fullcalendar/interaction'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -140,6 +140,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useI18n } from '@/composables/useI18n'
 import { useMessages } from '@opencloud-eu/web-pkg'
 import type { CalendarEvent } from '@/services/caldav'
+import { addDays, formatEventRange } from '@/utils/eventFormat'
 
 const { t } = useI18n()
 const de = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('de')
@@ -276,6 +277,72 @@ function activeCalColor(href: string): string {
   return calendars.value.find(c => href.startsWith(c.href))?.color ?? '#0082c9'
 }
 
+// --- hover tooltip ---
+// Month view truncates titles, and subscription events are read-only so there is
+// no dialog to open. The tooltip is the only way to read the full entry there.
+
+const DESC_LIMIT = 400
+const tooltipLocale = de ? 'de-DE' : 'en-US'
+
+let tooltipEl: HTMLDivElement | null = null
+
+function ensureTooltip(): HTMLDivElement {
+  if (!tooltipEl) {
+    // Appended to <body> rather than the component root: FullCalendar's scroll
+    // containers would clip a tooltip rendered inside the grid.
+    tooltipEl = document.createElement('div')
+    tooltipEl.className = 'agenda-event-tooltip'
+    tooltipEl.setAttribute('role', 'tooltip')
+    tooltipEl.hidden = true
+    document.body.appendChild(tooltipEl)
+  }
+  return tooltipEl
+}
+
+function fillTooltip(ev: CalendarEvent) {
+  const el = ensureTooltip()
+  el.replaceChildren()
+  const addLine = (text: string | undefined, cls: string) => {
+    if (!text) return
+    const line = document.createElement('div')
+    line.className = cls
+    // textContent, never innerHTML — subscription feeds are third-party content
+    line.textContent = text.length > DESC_LIMIT ? text.slice(0, DESC_LIMIT) + '…' : text
+    el.appendChild(line)
+  }
+  addLine(ev.title, 'tt-title')
+  addLine(formatEventRange(ev, tooltipLocale), 'tt-time')
+  addLine(ev.location, 'tt-location')
+  addLine(ev.description, 'tt-desc')
+}
+
+function positionTooltip(x: number, y: number) {
+  const el = ensureTooltip()
+  const pad = 12
+  const rect = el.getBoundingClientRect()
+  let left = x + pad
+  let top = y + pad
+  // Flip to the other side of the cursor when the tooltip would leave the viewport
+  if (left + rect.width > window.innerWidth - pad) left = x - rect.width - pad
+  if (top + rect.height > window.innerHeight - pad) top = y - rect.height - pad
+  el.style.left = `${Math.max(pad, left)}px`
+  el.style.top = `${Math.max(pad, top)}px`
+}
+
+function hideTooltip() {
+  if (tooltipEl) tooltipEl.hidden = true
+}
+
+// A tooltip left visible while the grid scrolls away would float over unrelated
+// content, so any scroll dismisses it.
+window.addEventListener('scroll', hideTooltip, true)
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', hideTooltip, true)
+  tooltipEl?.remove()
+  tooltipEl = null
+})
+
 // --- initial view via URL path ---
 function getInitialView(): string {
   const path = window.location.pathname
@@ -325,15 +392,28 @@ const calendarOptions = computed<CalendarOptions>(() => ({
   events: fcEvents.value,
   select(info: DateSelectArg) {
     // FC end is exclusive for all-day selections → shift back one day for the dialog
-    const end = info.allDay
-      ? new Date(info.end.getTime() - 24 * 60 * 60 * 1000)
-      : info.end
+    const end = info.allDay ? addDays(info.end, -1) : info.end
     openNewEvent(info.start, end, info.allDay)
   },
   eventClick(info: EventClickArg) {
     if (info.event.extendedProps.readonly) return
     const ev = info.event.extendedProps.event as CalendarEvent
     openEditEvent(ev)
+  },
+  eventDidMount(info: EventMountArg) {
+    const ev = info.event.extendedProps.event as CalendarEvent | undefined
+    if (!ev) return
+    info.el.addEventListener('mouseenter', (e: MouseEvent) => {
+      fillTooltip(ev)
+      ensureTooltip().hidden = false
+      positionTooltip(e.clientX, e.clientY)
+    })
+    info.el.addEventListener('mousemove', (e: MouseEvent) => positionTooltip(e.clientX, e.clientY))
+    info.el.addEventListener('mouseleave', hideTooltip)
+  },
+  eventWillUnmount() {
+    // The listeners go away with the element; the shared tooltip does not.
+    hideTooltip()
   },
   async eventDrop(info: EventDropArg) {
     const ev = info.event.extendedProps.event as CalendarEvent
@@ -801,6 +881,65 @@ watch(calendars, () => {
   :deep(.fc-popover-header) {
     background: #333;
     color: var(--oc-color-text-default);
+  }
+}
+</style>
+
+<!-- Not scoped: the tooltip is mounted on <body>, outside this component's subtree. -->
+<style>
+.agenda-event-tooltip {
+  position: fixed;
+  z-index: 1100;
+  max-width: 320px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--oc-color-border, #ddd);
+  background: var(--oc-color-background-default, #fff);
+  color: var(--oc-color-text-default, #222);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+
+.agenda-event-tooltip[hidden] {
+  display: none;
+}
+
+.agenda-event-tooltip .tt-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.agenda-event-tooltip .tt-time {
+  opacity: 0.75;
+}
+
+.agenda-event-tooltip .tt-location {
+  margin-top: 4px;
+}
+
+.agenda-event-tooltip .tt-location::before {
+  content: '📍 ';
+}
+
+.agenda-event-tooltip .tt-desc {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--oc-color-border, #e5e5e5);
+  white-space: pre-wrap;
+  opacity: 0.9;
+}
+
+@media (prefers-color-scheme: dark) {
+  .agenda-event-tooltip {
+    background: #2a2a2a;
+    border-color: #3a3a3a;
+    color: #e8e8e8;
+  }
+  .agenda-event-tooltip .tt-desc {
+    border-top-color: #3a3a3a;
   }
 }
 </style>
