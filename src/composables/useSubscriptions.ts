@@ -227,6 +227,17 @@ export function useSubscriptions(
       if (mySession !== session) return  // user switched or logged out while fetching
       const current = subscriptions.value.find(s => s.id === sub.id)
       if (!current || !current.enabled) return  // subscription was deleted or disabled while fetching
+      // A misconfigured /ics-proxy/ route falls through to the OpenCloud SPA, which
+      // answers 200 with index.html. Without this check parseEvents() would swallow
+      // the HTML into an empty event list and the subscription would look healthy.
+      if (!/^\s*BEGIN:VCALENDAR/i.test(icsText)) {
+        const contentType = res.headers?.get?.('content-type') ?? ''
+        throw new Error(
+          contentType.includes('html')
+            ? 'HTML statt iCal erhalten – ICS-Proxy nicht erreichbar oder nicht konfiguriert'
+            : 'Keine gültige iCal-Datei (BEGIN:VCALENDAR fehlt)',
+        )
+      }
       // parseEvents uses a placeholder href since subscriptions have no CalDAV href
       const parsed = parseEvents(icsText, sub.url)
       // prefix all UIDs to avoid collisions with CalDAV events

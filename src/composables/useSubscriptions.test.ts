@@ -388,3 +388,67 @@ describe('useSubscriptions — logout cleanup', () => {
     expect(subscriptionErrors.value).toEqual({})
   })
 })
+
+// ── Feed content validation ───────────────────────────────────────────────────
+
+describe('useSubscriptions — feed content validation', () => {
+  // Seeds one enabled subscription and runs fetchOne() against the given feed response.
+  async function fetchFeed(body: string, contentType: string) {
+    const onError = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('ics-proxy')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? contentType : null) },
+          text: async () => body,
+        } as unknown as Response
+      }
+      return { ok: false } as Response
+    }))
+
+    const userId = ref('user-V')
+    const accessToken = ref('tok')
+    const subs = useSubscriptions(() => userId.value, () => accessToken.value, onError)
+    await flush()
+
+    subs.subscriptions.value = [{ id: 'sub-v', url: 'http://v.ics', name: 'V', color: '#0f0', enabled: true }]
+    await subs.fetchAll()
+    await flush()
+
+    return { ...subs, onError }
+  }
+
+  it('reports an error when the proxy route falls through to the OpenCloud SPA', async () => {
+    // Exactly what an unconfigured /ics-proxy/ route returns: HTTP 200 + index.html
+    const { subscriptionErrors, onError } = await fetchFeed(
+      '<!DOCTYPE html><html lang="en"><head><base href="/"/>', 'text/html; charset=utf-8',
+    )
+
+    expect(subscriptionErrors.value['sub-v']).toMatch(/ICS-Proxy nicht erreichbar/)
+    expect(onError).toHaveBeenCalledWith('V', expect.stringMatching(/ICS-Proxy/), 'http://v.ics')
+  })
+
+  it('reports an error for a 200 response that is not iCalendar', async () => {
+    const { subscriptionErrors } = await fetchFeed('not a calendar at all', 'text/plain')
+
+    expect(subscriptionErrors.value['sub-v']).toMatch(/BEGIN:VCALENDAR fehlt/)
+  })
+
+  it('accepts a valid feed and records no error', async () => {
+    const { subscriptionErrors, onError } = await fetchFeed(
+      'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n', 'text/calendar; charset=utf-8',
+    )
+
+    expect(subscriptionErrors.value).toEqual({})
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('accepts a feed prefixed with a UTF-8 BOM', async () => {
+    const { subscriptionErrors } = await fetchFeed(
+      '﻿BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n', 'text/calendar',
+    )
+
+    expect(subscriptionErrors.value).toEqual({})
+  })
+})
