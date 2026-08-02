@@ -120,6 +120,7 @@ import type { Calendar, CalendarEvent } from '@/services/caldav'
 import { useI18n } from '@/composables/useI18n'
 import { DAY_NAMES, getNthWeekday, parseRrule, buildRrule as buildRruleUtil } from '@/utils/rrule'
 import type { RepeatFreq, RepeatEnd } from '@/utils/rrule'
+import { addDays } from '@/utils/eventFormat'
 
 const { t } = useI18n()
 
@@ -181,7 +182,7 @@ const defaultCalHref =
 // For all-day events, iCal DTEND is exclusive (= last day + 1).
 // Show the inclusive last day in the dialog; add 1 day back when saving.
 function allDayEndForDisplay(d: Date): Date {
-  return new Date(d.getTime() - 24 * 60 * 60 * 1000)
+  return addDays(d, -1)
 }
 
 const parsedRrule = props.event?.rrule ? parseRrule(props.event.rrule) : null
