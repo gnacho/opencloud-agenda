@@ -152,12 +152,14 @@ button {
   color: #1a1a1a;
 }
 
+button:hover { background: #e0e0e0; }
+
+/* Must come after the light-mode rules above: a media query adds no specificity,
+   so a later `button:hover` would win even in dark mode. */
 @media (prefers-color-scheme: dark) {
   button { background: #2a2a2a; color: #e8e8e8; border-color: #555; }
   button:hover { background: #333; }
 }
-
-button:hover { background: #e0e0e0; }
 
 button.primary {
   background: var(--oc-color-swatch-brand-default, #0082c9);

@@ -443,6 +443,13 @@ button {
   color: #1a1a1a;
 }
 
+button:hover {
+  background: #e0e0e0;
+}
+
+/* Must come after the light-mode rules above: a media query adds no specificity,
+   so a later `button:hover` would win even in dark mode — which turned the
+   hovered button light grey while its text stayed near-white. */
 @media (prefers-color-scheme: dark) {
   button {
     background: #2a2a2a;
@@ -452,10 +459,6 @@ button {
   button:hover {
     background: #333;
   }
-}
-
-button:hover {
-  background: #e0e0e0;
 }
 
 button.primary {
