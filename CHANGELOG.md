@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.2] - 2026-08-02
+
+### Fixed
+- **Dialog buttons became unreadable on hover in dark mode** — the light-mode `button:hover` rule was written after the `@media (prefers-color-scheme: dark)` block in `EventDialog` and `CalendarDialog`. A media query adds no specificity, so with equal selector weight the later rule won: the hovered button got a light grey background while its text kept the near-white dark-mode colour. The dark-mode block now comes last in both files
+
 ## [2.4.1] - 2026-08-02
 
 ### Fixed
