@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.5.1] - 2026-08-03
+
+### Fixed
+- **A second tab could silently overwrite subscriptions added elsewhere** — every write replaced the whole list, and `loadFromServer()` never read the ETag, so no write carried a precondition. A tab that had held its list since page load (`load()` only runs on mount or on a user/token change) would write that stale list back on the next toggle, discarding anything another tab or device had added. Writes now send `If-Match`; a `412` is resolved by re-reading, merging with `mergeSubscriptions()` and retrying, up to three times before the change is marked unsynced and reported
+- After a conflict is merged, the reconciled list is adopted in the UI instead of leaving the tab showing its pre-merge state
+
+### Notes
+- A server that sends no `ETag` gets unconditional writes exactly as before, so the guard cannot break saving on a WebDAV implementation that lacks it
+
+### Tests
+- 4 tests against a fake WebDAV file that actually honours `If-Match`: the header is sent once an ETag is known, omitted when the server provides none, a stale write is refused and merged rather than applied, and repeated conflicts give up while keeping the unsynced marker
+
 ## [2.5.0] - 2026-08-03
 
 ### Fixed
