@@ -51,7 +51,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import QrCreator from 'qr-creator'
 import { useI18n } from '@/composables/useI18n'
 import { copyText } from '@/utils/clipboard'
-import { toWebcalUrl } from '@/utils/subscriptionUrl'
+import { toWebcalUrl, canonicalFeedUrl } from '@/utils/subscriptionUrl'
 import type { IcsSubscription } from '@/composables/useSubscriptions'
 
 const { t } = useI18n()
@@ -67,9 +67,12 @@ const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 // away because a scanner that does not know the scheme may offer nothing at all,
 // and there is no way to detect that from here.
 const scheme = ref<'webcal' | 'https'>('webcal')
-const shareUrl = computed(() =>
-  scheme.value === 'webcal' ? toWebcalUrl(props.subscription.url) : props.subscription.url,
-)
+// Canonicalised here as well as on add, so a subscription stored before that
+// existed still hands out a URL the other device can actually fetch.
+const shareUrl = computed(() => {
+  const url = canonicalFeedUrl(props.subscription.url)
+  return scheme.value === 'webcal' ? toWebcalUrl(url) : url
+})
 
 function renderQr() {
   if (!qrCanvas.value) return

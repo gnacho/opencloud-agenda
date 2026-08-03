@@ -31,6 +31,7 @@
 <script setup lang="ts">
 import { reactive, computed, ref } from 'vue'
 import { useI18n } from '@/composables/useI18n'
+import { canonicalFeedUrl } from '@/utils/subscriptionUrl'
 
 const { t } = useI18n()
 
@@ -54,7 +55,9 @@ function normalizeUrl(raw: string): string {
     const cid = new URL(url).searchParams.get('cid')
     if (cid) url = cid
   } catch { /* leave as-is */ }
-  return url
+  // Skip Google's 302 hop: clients that do not follow redirects otherwise
+  // subscribe successfully and then show an empty calendar.
+  return canonicalFeedUrl(url)
 }
 
 function submit() {

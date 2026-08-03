@@ -8,3 +8,17 @@
 export function toWebcalUrl(url: string): string {
   return url.replace(/^https?:\/\//i, 'webcal://')
 }
+
+// Google hands out feed URLs under www.google.com, which answers 302 and no
+// body, redirecting to calendar.google.com. The app never noticed because the
+// ICS proxy follows redirects — but a subscription app on a phone may not, and
+// then the calendar is added and stays empty.
+//
+// Both hosts serve the same resource, so pointing straight at the target is
+// safe and spares every consumer the extra hop.
+export function canonicalFeedUrl(url: string): string {
+  return url.replace(
+    /^(https?:\/\/)www\.google\.com\/calendar\/ical\//i,
+    '$1calendar.google.com/calendar/ical/',
+  )
+}
