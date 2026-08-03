@@ -79,48 +79,68 @@ function webdavDirUrl(userId: string): string {
   return `/remote.php/dav/files/${encodeURIComponent(userId)}/${WEBDAV_DIR}/`
 }
 
-async function loadFromServer(userId: string, accessToken: string): Promise<IcsSubscription[] | null> {
+export interface ServerState {
+  subs: IcsSubscription[]
+  etag: string | null
+}
+
+async function loadFromServer(userId: string, accessToken: string): Promise<ServerState | null> {
   try {
     const res = await fetch(webdavUrl(userId), {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
     if (!res.ok) return null
-    return await res.json() as IcsSubscription[]
+    // The ETag is what makes the conditional write below possible. A server that
+    // does not send one simply gets unconditional writes, exactly as before.
+    const etag = res.headers?.get?.('etag') ?? null
+    return { subs: await res.json() as IcsSubscription[], etag }
   } catch {
     return null
   }
 }
 
-async function saveToServer(userId: string, accessToken: string, subs: IcsSubscription[]): Promise<boolean> {
+export interface WriteResult {
+  ok: boolean
+  etag: string | null
+  /** The file changed since we last read it — our write was refused, not applied. */
+  conflict: boolean
+}
+
+// The whole list is replaced on every write, so without a precondition a client
+// holding a stale copy silently discards whatever another client added in the
+// meantime. `If-Match` turns that into a 412 the caller can resolve by merging.
+async function saveToServer(
+  userId: string,
+  accessToken: string,
+  subs: IcsSubscription[],
+  etag: string | null,
+): Promise<WriteResult> {
+  const url = webdavUrl(userId)
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  }
+  if (etag) headers['If-Match'] = etag
+
   try {
-    const url = webdavUrl(userId)
-    let res = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(subs),
-    })
+    let res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(subs) })
     if (res.status === 409) {
       // Parent directory missing — create it first.
       await fetch(webdavDirUrl(userId), {
         method: 'MKCOL',
         headers: { Authorization: `Bearer ${accessToken}` },
       })
-      res = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(subs),
-      })
+      res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(subs) })
     }
-    return res.ok
+    if (res.status === 412) return { ok: false, etag: null, conflict: true }
+    return {
+      ok: res.ok,
+      etag: res.ok ? (res.headers?.get?.('etag') ?? null) : null,
+      conflict: false,
+    }
   } catch {
     // Server save failure is non-fatal — localStorage cache remains valid.
-    return false
+    return { ok: false, etag: null, conflict: false }
   }
 }
 
@@ -147,10 +167,40 @@ export function useSubscriptions(
   // a late-arriving token should push local data to the server rather than
   // overwrite it with an older server copy.
   let locallyModified = false
+  // ETag of the copy this tab last saw. Sent as If-Match so a write cannot
+  // silently clobber changes another tab or device made in the meantime.
+  let serverEtag: string | null = null
+  const MAX_CONFLICT_RETRIES = 3
   // Incremented every time locallyModified is set to true. A write callback
   // captures the version at launch and may only clear the flag when it matches,
   // preventing a stale in-flight write from wiping a newer offline edit.
   let modifyVersion = 0
+
+  // Writes the list, resolving a concurrent modification instead of overwriting
+  // it. Returns the list that actually reached the server — after a conflict
+  // that is the merge of ours and theirs, not what the caller passed in.
+  async function pushToServer(
+    uid: string,
+    token: string,
+    subs: IcsSubscription[],
+  ): Promise<{ ok: boolean; list: IcsSubscription[] }> {
+    let payload = subs
+    for (let attempt = 0; attempt < MAX_CONFLICT_RETRIES; attempt++) {
+      const res = await saveToServer(uid, token, payload, serverEtag)
+      if (res.ok) {
+        serverEtag = res.etag
+        return { ok: true, list: payload }
+      }
+      if (!res.conflict) return { ok: false, list: payload }
+      // Someone else wrote since we last read. Take their version and layer
+      // ours on top rather than discarding either side.
+      const fresh = await loadFromServer(uid, token)
+      if (fresh === null) return { ok: false, list: payload }
+      serverEtag = fresh.etag
+      payload = mergeSubscriptions(payload, fresh.subs)
+    }
+    return { ok: false, list: payload }
+  }
 
   async function load() {
     const uid = userId()
@@ -162,9 +212,10 @@ export function useSubscriptions(
     // already scheduled its own write, so this load must not push as well.
     const unsyncedAtStart = locallyModified || hasUnsynced(uid)
     // Try server first; fall back to local cache.
-    const serverSubs = token ? await loadFromServer(uid, token) : null
+    const server = token ? await loadFromServer(uid, token) : null
     if (mySession !== session) return  // user switched or logged out while we waited
-    if (serverSubs !== null) {
+    if (server !== null) {
+      serverEtag = server.etag
       // Re-read after the await too: a subscription added mid-flight must not be
       // dropped by the replace branch below.
       if (locallyModified || hasUnsynced(uid)) {
@@ -172,21 +223,25 @@ export function useSubscriptions(
         // replacing. On a fresh page load the in-memory ref is still empty, so
         // the local side comes from the cache.
         const local = subscriptions.value.length ? subscriptions.value : loadFromStorage(uid)
-        const merged = mergeSubscriptions(local, serverSubs)
+        const merged = mergeSubscriptions(local, server.subs)
         const capturedVersion = modifyVersion
         subscriptions.value = merged
         saveToStorage(uid, merged)
         if (!unsyncedAtStart) return  // mid-flight change — its own write is pending
-        const ok = await saveToServer(uid, token, merged)
+        const { ok, list } = await pushToServer(uid, token, merged)
         if (mySession !== session) return
         if (ok && modifyVersion === capturedVersion) {
           locallyModified = false
           clearUnsynced(uid)
+          if (list !== merged) {
+            subscriptions.value = list
+            saveToStorage(uid, list)
+          }
         }
       } else {
-        subscriptions.value = serverSubs
+        subscriptions.value = server.subs
         // Keep local cache in sync.
-        saveToStorage(uid, serverSubs)
+        saveToStorage(uid, server.subs)
         locallyModified = false
       }
     } else {
@@ -220,15 +275,22 @@ export function useSubscriptions(
     // is closed inside the debounce window, or the write fails, the marker
     // outlives this page and the next load merges rather than overwrites.
     markUnsynced(snapshotUid)
+    const mySession = session
     writeTimer = setTimeout(() => {
       writeTimer = null
       const currentToken = accessToken()
       if (snapshotUid && currentToken) {
-        saveToServer(snapshotUid, currentToken, snapshotSubs).then(ok => {
+        pushToServer(snapshotUid, currentToken, snapshotSubs).then(({ ok, list }) => {
           if (ok) {
             if (modifyVersion === capturedVersion) {
               locallyModified = false
               clearUnsynced(snapshotUid)
+              if (list !== snapshotSubs && mySession === session) {
+                // A concurrent change was merged in — adopt the reconciled list
+                // so the UI shows what the server now holds.
+                subscriptions.value = list
+                saveToStorage(snapshotUid, list)
+              }
             }
           } else {
             // Previously silent: no flag, no retry, no message — the change

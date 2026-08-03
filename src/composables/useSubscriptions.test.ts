@@ -578,3 +578,139 @@ describe('mergeSubscriptions', () => {
     expect(mergeSubscriptions([], [])).toEqual([])
   })
 })
+
+// ── Concurrent writes from a second tab ───────────────────────────────────────
+
+// A fake WebDAV file that honours If-Match, so the conflict path is exercised
+// for real rather than asserted against a hand-rolled 412.
+function fakeWebdav(initial: { id: string; url: string; name: string; color: string; enabled: boolean }[]) {
+  const state = { list: initial, etag: 'v1', version: 1, puts: [] as (string | undefined)[] }
+  const headers = () => ({ get: (h: string) => (h.toLowerCase() === 'etag' ? state.etag : null) })
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'PUT') {
+      const ifMatch = (init.headers as Record<string, string>)?.['If-Match']
+      state.puts.push(ifMatch)
+      if (ifMatch && ifMatch !== state.etag) {
+        return { ok: false, status: 412, headers: headers() } as unknown as Response
+      }
+      state.list = JSON.parse(init.body as string)
+      state.version++
+      state.etag = `v${state.version}`
+      return { ok: true, status: 200, headers: headers() } as unknown as Response
+    }
+    if (String(url).includes('subscriptions.json')) {
+      return { ok: true, headers: headers(), json: async () => state.list } as unknown as Response
+    }
+    return { ok: false } as Response
+  })
+  return { state, fetchMock }
+}
+
+const sub = (id: string, name: string) => ({ id, url: `http://${id}.ics`, name, color: '#000', enabled: true })
+
+describe('useSubscriptions — concurrent writes', () => {
+  it('sends If-Match once an ETag is known', async () => {
+    const { state, fetchMock } = fakeWebdav([sub('a', 'A')])
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { toggleSubscription, subscriptions } = makeSubs('user-etag', 'tok')
+    await flush()
+    toggleSubscription(subscriptions.value[0].id)
+    await flush()
+    vi.runAllTimers()
+    await flush()
+
+    expect(state.puts).toEqual(['v1'])
+  })
+
+  it('omits If-Match when the server sends no ETag', async () => {
+    // Backwards compatible: on a server without ETags nothing changes.
+    const puts: (string | undefined)[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        puts.push((init.headers as Record<string, string>)?.['If-Match'])
+        return { ok: true } as Response
+      }
+      if (String(url).includes('subscriptions.json')) {
+        return { ok: true, json: async () => [sub('a', 'A')] } as Response
+      }
+      return { ok: false } as Response
+    }))
+
+    const { toggleSubscription, subscriptions } = makeSubs('user-noetag', 'tok')
+    await flush()
+    toggleSubscription(subscriptions.value[0].id)
+    await flush()
+    vi.runAllTimers()
+    await flush()
+
+    expect(puts).toEqual([undefined])
+  })
+
+  it('keeps what another tab added instead of overwriting it', async () => {
+    // The scenario that used to lose data: this tab has held a stale list since
+    // page load, another tab adds a feed, then this tab toggles something.
+    const { state, fetchMock } = fakeWebdav([sub('a', 'A'), sub('b', 'B')])
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { toggleSubscription, subscriptions } = makeSubs('user-2tabs', 'tok')
+    await flush()
+    expect(subscriptions.value).toHaveLength(2)
+
+    // Another tab appends a feed and bumps the ETag
+    state.list = [...state.list, sub('fortuna', 'Fortuna')]
+    state.version++
+    state.etag = `v${state.version}`
+
+    // This tab toggles — its write carries the outdated ETag
+    toggleSubscription(subscriptions.value[0].id)
+    await flush()
+    vi.runAllTimers()
+    await flush()
+    await flush()
+
+    // Refused once, retried after merging
+    expect(state.puts).toHaveLength(2)
+    expect(state.puts[0]).toBe('v1')
+
+    const ids = state.list.map(x => x.id)
+    expect(ids).toContain('fortuna')          // the other tab's addition survived
+    expect(state.list.find(x => x.id === 'a')!.enabled).toBe(false)  // our toggle applied
+
+    // The UI adopts the reconciled list rather than showing a stale one
+    expect(subscriptions.value.map(x => x.id)).toContain('fortuna')
+  })
+
+  it('gives up after repeated conflicts and keeps the unsynced marker', async () => {
+    const onSyncError = vi.fn()
+    // A server that never accepts our write: the ETag moves on every read.
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return { ok: false, status: 412 } as Response
+      if (String(url).includes('subscriptions.json')) {
+        n++
+        return {
+          ok: true,
+          headers: { get: () => `v${n}` },
+          json: async () => [sub('a', 'A')],
+        } as unknown as Response
+      }
+      return { ok: false } as Response
+    }))
+
+    const userId = ref('user-conflict')
+    const accessToken = ref('tok')
+    const { toggleSubscription, subscriptions } = useSubscriptions(
+      () => userId.value, () => accessToken.value, undefined, onSyncError,
+    )
+    await flush()
+    toggleSubscription(subscriptions.value[0].id)
+    await flush()
+    vi.runAllTimers()
+    await flush()
+    await flush()
+
+    expect(onSyncError).toHaveBeenCalled()
+    expect(localStorageData['agenda_subscriptions_user-conflict_unsynced']).toBe('1')
+  })
+})
