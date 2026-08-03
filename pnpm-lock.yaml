@@ -41,6 +41,9 @@ importers:
       pinia:
         specifier: ^2.3.1
         version: 2.3.1(typescript@5.9.3)(vue@3.5.32(typescript@5.9.3))
+      qr-creator:
+        specifier: ^1.0.0
+        version: 1.0.0
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -2006,6 +2009,9 @@ packages:
   punycode.js@2.3.1:
     resolution: {integrity: sha512-uxFIHU0YlHYhDQtV4R9J6a52SLx28BCjT+4ieh7IGbgwVJWO+km431c4yRlREUAsAmt/uMjQUyQHNEPf0M39CA==}
     engines: {node: '>=6'}
+
+  qr-creator@1.0.0:
+    resolution: {integrity: sha512-C0cqfbS1P5hfqN4NhsYsUXePlk9BO+a45bAQ3xLYjBL3bOIFzoVEjs79Fado9u9BPBD3buHi3+vY+C8tHh4qMQ==}
 
   qs@6.15.0:
     resolution: {integrity: sha512-mAZTtNCeetKMH+pSjrb76NAM8V9a05I9aBZOHztWy/UqcJdQYNsf59vrRKWnojAT9Y+GbIvoTBC++CPHqpDBhQ==}
@@ -4514,6 +4520,8 @@ snapshots:
   proxy-from-env@2.1.0: {}
 
   punycode.js@2.3.1: {}
+
+  qr-creator@1.0.0: {}
 
   qs@6.15.0:
     dependencies:

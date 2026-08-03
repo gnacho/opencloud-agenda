@@ -63,7 +63,11 @@
             @click.stop="toggleSubscription(sub.id)"
           />
           <span class="cal-dot" :style="{ background: sub.color }" />
-          <span class="cal-name" :title="sub.url">{{ sub.name }}</span>
+          <span
+            class="cal-name sub-name"
+            :title="t('Show URL and QR code')"
+            @click.stop="sharingSubscription = sub"
+          >{{ sub.name }}</span>
           <button class="btn-sub-remove" :title="t('Delete')" @click.stop="removeSubscription(sub.id)">×</button>
         </li>
       </ul>
@@ -93,6 +97,13 @@
       v-if="calendarDialogOpen"
       @create="handleCreateCalendar"
       @close="calendarDialogOpen = false"
+    />
+
+    <!-- Subscription URL / QR dialog -->
+    <SubscriptionShareDialog
+      v-if="sharingSubscription"
+      :subscription="sharingSubscription"
+      @close="sharingSubscription = null"
     />
 
     <!-- Subscription dialog -->
@@ -133,9 +144,11 @@ import deLocale from '@fullcalendar/core/locales/de'
 import EventDialog from '@/components/EventDialog.vue'
 import CalendarDialog from '@/components/CalendarDialog.vue'
 import SubscriptionDialog from '@/components/SubscriptionDialog.vue'
+import SubscriptionShareDialog from '@/components/SubscriptionShareDialog.vue'
 import HelpView from '@/views/HelpView.vue'
 import { useCalendar } from '@/composables/useCalendar'
 import { useSubscriptions } from '@/composables/useSubscriptions'
+import type { IcsSubscription } from '@/composables/useSubscriptions'
 import { useAuth } from '@/composables/useAuth'
 import { useI18n } from '@/composables/useI18n'
 import { useMessages } from '@opencloud-eu/web-pkg'
@@ -185,6 +198,7 @@ const {
 )
 
 const subscriptionDialogOpen = ref(false)
+const sharingSubscription = ref<IcsSubscription | null>(null)
 
 // --- calendar rename state ---
 const renamingHref = ref<string | null>(null)
@@ -638,6 +652,14 @@ watch(calendars, () => {
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.sub-name {
+  cursor: pointer;
+}
+
+.sub-name:hover {
+  text-decoration: underline;
 }
 
 .cal-name {

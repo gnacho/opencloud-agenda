@@ -77,6 +77,12 @@ const translations: Record<string, string> = {
   'e.g. Public Holidays': 'z. B. Feiertage',
   'Add': 'Hinzufügen',
   'Please enter a valid URL.': 'Bitte eine gültige URL eingeben.',
+  'Show URL and QR code': 'URL und QR-Code anzeigen',
+  'Scan this code to add the calendar on another device.': 'Diesen Code scannen, um den Kalender auf einem anderen Gerät hinzuzufügen.',
+  'Copy URL': 'URL kopieren',
+  'Copied': 'Kopiert',
+  'Close': 'Schließen',
+  'Copying is unavailable here — select the address and copy it manually.': 'Kopieren ist hier nicht verfügbar – bitte die Adresse markieren und selbst kopieren.',
 }
 
 // Must be read at call time, never captured in a module- or setup-level
