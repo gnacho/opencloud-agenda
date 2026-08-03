@@ -141,12 +141,36 @@ This has one consequence worth knowing up front:
 
 Radicale stores events; it does not fetch remote feeds. Putting subscriptions there would mean polling the source and writing the events into a Radicale collection, which needs a service that runs whether or not a browser is open — outside what a web app can do.
 
-**To see the same feed on a phone,** subscribe to the `.ics` URL directly in the device's calendar instead of going through Agenda:
+So to see the same feed elsewhere, subscribe to the `.ics` URL directly on that device. The sharing dialog exists to make that painless.
 
-- **Android:** DAVx⁵ supports WebCal subscriptions; Google Calendar has "Add by URL"
-- **iOS:** Settings → Calendar → Accounts → Add Subscribed Calendar
+### Sharing a subscription: `webcal://` or `https://`
 
-The URLs are all in your `subscriptions.json`, ready to copy.
+**Click a subscription's name** in the sidebar. The dialog shows a QR code, the feed URL and a copy button — plus a switch between two schemes.
+
+**The switch is not a convenience. Neither scheme works everywhere:**
+
+| Target | Needs | Why |
+|---|---|---|
+| Android — ICSx⁵, DAVx⁵ | `webcal://` | An `https://` QR is just a web link. The phone opens a browser and shows raw iCalendar text; nothing offers to subscribe |
+| Thunderbird | `https://` | Rejects `webcal://` in the "New calendar → On the network" dialog |
+| iOS | `webcal://` | Safari hands the scheme to Calendar, which prompts to subscribe |
+
+Same feed, both spellings — only the scheme differs:
+
+```
+webcal://calendar.google.com/calendar/ical/<id>%40group.calendar.google.com/public/basic.ics
+https://calendar.google.com/calendar/ical/<id>%40group.calendar.google.com/public/basic.ics
+```
+
+`webcal://` is the default because that is what the QR is for. Switch to `https://` when the target is a desktop client.
+
+Two details the app handles for you:
+
+- **Stored URLs always use `http(s)`** — that is what `fetch()` needs. The scheme is swapped only for what leaves the app.
+- **Google feed URLs are rewritten to `calendar.google.com`.** Google hands them out under `www.google.com`, which answers `302` with an empty body. Clients that do not follow redirects would subscribe and then show nothing.
+
+> [!TIP]
+> If an Android subscription stays empty, read the status in ICSx⁵ first. **"Not synced yet"** means Android never ran the sync — check battery optimisation for ICSx⁵, then Settings → Accounts → "Auto-sync data". An actual error message means the URL is the problem. The two look identical in the calendar app and lead to completely different searches.
 
 ### 1. Create the proxy service
 

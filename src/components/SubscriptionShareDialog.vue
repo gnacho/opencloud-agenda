@@ -63,9 +63,11 @@ const qrCanvas = ref<HTMLCanvasElement | null>(null)
 const urlInput = ref<HTMLInputElement | null>(null)
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 
-// webcal by default — that is the whole point of the QR. https stays one click
-// away because a scanner that does not know the scheme may offer nothing at all,
-// and there is no way to detect that from here.
+// Both schemes are needed; neither works everywhere. Confirmed in practice:
+// Android (ICSx⁵, DAVx⁵) only accepts webcal:// — an https QR is treated as a
+// web link and the browser just shows raw iCalendar text. Thunderbird only
+// accepts https://. webcal is the default because scanning is what the QR is
+// for; the switch is not a convenience and must not be removed.
 const scheme = ref<'webcal' | 'https'>('webcal')
 // Canonicalised here as well as on add, so a subscription stored before that
 // existed still hands out a URL the other device can actually fetch.
