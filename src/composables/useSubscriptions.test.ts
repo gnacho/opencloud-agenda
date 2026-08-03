@@ -5,7 +5,7 @@ import { nextTick, ref } from 'vue'
 async function flush() {
   for (let i = 0; i < 10; i++) await Promise.resolve()
 }
-import { useSubscriptions } from './useSubscriptions'
+import { useSubscriptions, mergeSubscriptions } from './useSubscriptions'
 
 vi.mock('@/services/caldav', () => ({
   parseEvents: () => [],
@@ -109,13 +109,17 @@ describe('useSubscriptions — accessToken timing', () => {
     accessToken.value = 'tok-late'
     await flush()
 
-    expect(subscriptions.value).toHaveLength(1)
-    expect(subscriptions.value[0].url).toBe(localSub.url)
+    // Merged, not replaced: the offline addition survives AND the entry that
+    // already existed on the server (e.g. added on another device) is kept.
+    // Before the merge landed, pushing local state wiped srv-old off the server.
+    const urls = subscriptions.value.map(s => s.url)
+    expect(urls).toContain(localSub.url)
+    expect(urls).toContain('http://old.ics')
 
-    // Local state must have been pushed to server (one PUT with the new sub)
+    // One PUT, carrying both
     expect(putBodies).toHaveLength(1)
     const saved = JSON.parse(putBodies[0]) as { url: string }[]
-    expect(saved[0].url).toBe(localSub.url)
+    expect(saved.map(s => s.url)).toEqual(expect.arrayContaining([localSub.url, 'http://old.ics']))
   })
 
   it('keeps locallyModified when the late-token push fails, so next reload retries', async () => {
@@ -138,9 +142,11 @@ describe('useSubscriptions — accessToken timing', () => {
     accessToken.value = 'tok-fail'
     await flush()
 
-    // Local sub must still be in memory (not overwritten by old server copy)
-    expect(subscriptions.value).toHaveLength(1)
-    expect(subscriptions.value[0].url).toBe(localSub.url)
+    // Local sub must still be in memory (not overwritten by old server copy);
+    // the server entry is merged in rather than discarded.
+    const urlsAfterFail = subscriptions.value.map(s => s.url)
+    expect(urlsAfterFail).toContain(localSub.url)
+    expect(urlsAfterFail).toContain('http://old.ics')
   })
 
   it('does not clear locallyModified when a stale online write resolves after a newer offline edit', async () => {
@@ -193,7 +199,9 @@ describe('useSubscriptions — accessToken timing', () => {
     const urls = subscriptions.value.map(s => s.url)
     expect(urls).toContain('http://sub-a.ics')
     expect(urls).toContain('http://sub-b.ics')
-    expect(urls).not.toContain('http://stale.ics')
+    // The server entry is merged in, not discarded — what matters is that it did
+    // not *replace* the two offline additions.
+    expect(urls).toContain('http://stale.ics')
   })
 })
 
@@ -450,5 +458,123 @@ describe('useSubscriptions — feed content validation', () => {
     )
 
     expect(subscriptionErrors.value).toEqual({})
+  })
+})
+
+// ── Unsynced-marker durability ────────────────────────────────────────────────
+
+describe('useSubscriptions — surviving a failed server write', () => {
+  // The real incident: a subscription was added while the server happened to be
+  // restarting. The PUT failed, nothing recorded that fact, and the next page
+  // load replaced the local list with the older server copy — wiping the entry
+  // from localStorage too. It was unrecoverable and completely silent.
+  it('keeps a subscription whose write failed, across a reload', async () => {
+    const serverSubs = [{ id: 'srv-1', url: 'http://old.ics', name: 'Old', color: '#888', enabled: true }]
+    let putFails = true
+    const putBodies: string[] = []
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        putBodies.push(init.body as string)
+        return { ok: !putFails, status: putFails ? 503 : 200 } as Response
+      }
+      if (String(url).includes('subscriptions.json')) return { ok: true, json: async () => serverSubs } as Response
+      return { ok: false } as Response
+    }))
+
+    // Session 1 — user adds the feed, the write fails
+    const s1 = makeSubs('user-reload', 'tok')
+    await flush()
+    s1.addSubscription('http://fortuna.ics', 'Fortuna', '#986a44')
+    await flush()
+    vi.runAllTimers()
+    await flush()
+    expect(putBodies).toHaveLength(1)
+
+    // Session 2 — fresh composable, as after reloading the page. The server
+    // still returns the old list; the addition must not be dropped.
+    putFails = false
+    const s2 = makeSubs('user-reload', 'tok')
+    await flush()
+
+    const urls = s2.subscriptions.value.map(x => x.url)
+    expect(urls).toContain('http://fortuna.ics')
+    expect(urls).toContain('http://old.ics')
+
+    // …and it gets pushed up rather than only living locally
+    const lastPut = JSON.parse(putBodies[putBodies.length - 1]) as { url: string }[]
+    expect(lastPut.map(x => x.url)).toContain('http://fortuna.ics')
+  })
+
+  it('reports a failed write instead of swallowing it', async () => {
+    const onSyncError = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return { ok: false, status: 500 } as Response
+      if (String(url).includes('subscriptions.json')) return { ok: true, json: async () => [] } as Response
+      return { ok: false } as Response
+    }))
+
+    const userId = ref('user-msg')
+    const accessToken = ref('tok')
+    const { addSubscription } = useSubscriptions(
+      () => userId.value, () => accessToken.value, undefined, onSyncError,
+    )
+    await flush()
+    addSubscription('http://x.ics', 'X', '#fff')
+    await flush()
+    vi.runAllTimers()
+    await flush()
+
+    expect(onSyncError).toHaveBeenCalledWith(expect.stringMatching(/nicht auf dem Server gespeichert/))
+  })
+
+  it('does not resurrect an entry deleted elsewhere once the write was confirmed', async () => {
+    // Guards the merge: after a successful write the marker is cleared, so a
+    // later load takes the server copy verbatim rather than re-adding old items.
+    let serverSubs = [{ id: 'a', url: 'http://a.ics', name: 'A', color: '#111', enabled: true }]
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return { ok: true } as Response
+      if (String(url).includes('subscriptions.json')) return { ok: true, json: async () => serverSubs } as Response
+      return { ok: false } as Response
+    }))
+
+    const s1 = makeSubs('user-del', 'tok')
+    await flush()
+    s1.addSubscription('http://b.ics', 'B', '#222')
+    await flush()
+    vi.runAllTimers()
+    await flush()
+
+    // Another device removes both entries
+    serverSubs = []
+    const s2 = makeSubs('user-del', 'tok')
+    await flush()
+
+    expect(s2.subscriptions.value).toEqual([])
+  })
+})
+
+describe('mergeSubscriptions', () => {
+  const sub = (id: string, name: string) => ({ id, url: `http://${id}.ics`, name, color: '#000', enabled: true })
+
+  it('keeps entries that exist on only one side', () => {
+    const merged = mergeSubscriptions([sub('local', 'L')], [sub('server', 'S')])
+    expect(merged.map(s => s.id)).toEqual(['server', 'local'])
+  })
+
+  it('lets the local version win for the same id', () => {
+    const merged = mergeSubscriptions(
+      [{ ...sub('x', 'renamed'), enabled: false }],
+      [sub('x', 'original')],
+    )
+    expect(merged).toHaveLength(1)
+    expect(merged[0].name).toBe('renamed')
+    expect(merged[0].enabled).toBe(false)
+  })
+
+  it('handles empty sides', () => {
+    expect(mergeSubscriptions([], [sub('s', 'S')]).map(s => s.id)).toEqual(['s'])
+    expect(mergeSubscriptions([sub('l', 'L')], []).map(s => s.id)).toEqual(['l'])
+    expect(mergeSubscriptions([], [])).toEqual([])
   })
 })

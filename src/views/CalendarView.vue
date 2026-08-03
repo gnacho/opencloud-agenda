@@ -181,6 +181,7 @@ const {
   () => userId.value,
   () => accessToken.value,
   (name, msg) => showErrorMessage({ title: `Kalender-Fehler: ${name}`, desc: msg, timeout: 10000 }),
+  (msg) => showErrorMessage({ title: 'Abonnements nicht gespeichert', desc: msg, timeout: 10000 }),
 )
 
 const subscriptionDialogOpen = ref(false)

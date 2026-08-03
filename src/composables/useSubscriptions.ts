@@ -30,6 +30,45 @@ function saveToStorage(userId: string, subs: IcsSubscription[]) {
   localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(subs))
 }
 
+// ── unsynced marker ───────────────────────────────────────────────────────────
+// Records that the local list holds changes the server has not confirmed. It
+// lives in localStorage rather than in a closure variable so it survives a page
+// reload — without that, a write that failed (server restarting, token expired,
+// tab closed within the debounce window) left no trace at all, and the next
+// load happily replaced the local list with the older server copy.
+
+function dirtyKey(userId: string): string {
+  return `${STORAGE_KEY_PREFIX}${userId}_unsynced`
+}
+
+function markUnsynced(userId: string) {
+  if (!userId) return
+  try { localStorage.setItem(dirtyKey(userId), '1') } catch { /* quota — nothing we can do */ }
+}
+
+function clearUnsynced(userId: string) {
+  if (!userId) return
+  try { localStorage.removeItem(dirtyKey(userId)) } catch { /* ignore */ }
+}
+
+function hasUnsynced(userId: string): boolean {
+  try { return localStorage.getItem(dirtyKey(userId)) === '1' } catch { return false }
+}
+
+// Union by id, local winning on conflict. A subscription present only locally is
+// one whose write never reached the server; keeping it is the only way it
+// survives. The trade-off is that a deletion that was never synced reappears —
+// deliberate, because a resurrected entry can be deleted again in one click,
+// whereas a lost feed URL is gone for good.
+export function mergeSubscriptions(
+  local: IcsSubscription[],
+  server: IcsSubscription[],
+): IcsSubscription[] {
+  const byId = new Map(server.map(s => [s.id, s]))
+  for (const s of local) byId.set(s.id, s)
+  return [...byId.values()]
+}
+
 // ── WebDAV Storage ────────────────────────────────────────────────────────────
 
 function webdavUrl(userId: string): string {
@@ -91,6 +130,7 @@ export function useSubscriptions(
   userId: () => string,
   accessToken: () => string,
   onError?: (name: string, message: string, url: string) => void,
+  onSyncError?: (message: string) => void,
 ) {
   const subscriptions = ref<IcsSubscription[]>([])
   const subscriptionEvents = ref<CalendarEvent[]>([])
@@ -112,25 +152,37 @@ export function useSubscriptions(
   // preventing a stale in-flight write from wiping a newer offline edit.
   let modifyVersion = 0
 
-  async function load(tokenJustArrived = false) {
+  async function load() {
     const uid = userId()
     const token = accessToken()
     if (!uid) return
 
     const mySession = session
+    // Captured before the await: a change made while the GET is in flight has
+    // already scheduled its own write, so this load must not push as well.
+    const unsyncedAtStart = locallyModified || hasUnsynced(uid)
     // Try server first; fall back to local cache.
     const serverSubs = token ? await loadFromServer(uid, token) : null
     if (mySession !== session) return  // user switched or logged out while we waited
     if (serverSubs !== null) {
-      if (tokenJustArrived && locallyModified) {
-        // Local state is newer than the server copy — push it up instead of
-        // overwriting the user's offline changes. Only clear the flag when the
-        // push is confirmed AND no newer offline edit has arrived in the meantime.
+      // Re-read after the await too: a subscription added mid-flight must not be
+      // dropped by the replace branch below.
+      if (locallyModified || hasUnsynced(uid)) {
+        // Local state holds changes the server never confirmed. Merge instead of
+        // replacing. On a fresh page load the in-memory ref is still empty, so
+        // the local side comes from the cache.
+        const local = subscriptions.value.length ? subscriptions.value : loadFromStorage(uid)
+        const merged = mergeSubscriptions(local, serverSubs)
         const capturedVersion = modifyVersion
-        const ok = await saveToServer(uid, token, subscriptions.value)
+        subscriptions.value = merged
+        saveToStorage(uid, merged)
+        if (!unsyncedAtStart) return  // mid-flight change — its own write is pending
+        const ok = await saveToServer(uid, token, merged)
         if (mySession !== session) return
-        saveToStorage(uid, subscriptions.value)
-        if (ok && modifyVersion === capturedVersion) locallyModified = false
+        if (ok && modifyVersion === capturedVersion) {
+          locallyModified = false
+          clearUnsynced(uid)
+        }
       } else {
         subscriptions.value = serverSubs
         // Keep local cache in sync.
@@ -160,15 +212,31 @@ export function useSubscriptions(
       // pushes this state to the server instead of pulling an older copy.
       modifyVersion++
       locallyModified = true
+      markUnsynced(snapshotUid)
       return
     }
     const capturedVersion = modifyVersion
+    // Marked before the write, cleared only once the server confirms. If the tab
+    // is closed inside the debounce window, or the write fails, the marker
+    // outlives this page and the next load merges rather than overwrites.
+    markUnsynced(snapshotUid)
     writeTimer = setTimeout(() => {
       writeTimer = null
       const currentToken = accessToken()
       if (snapshotUid && currentToken) {
         saveToServer(snapshotUid, currentToken, snapshotSubs).then(ok => {
-          if (ok && modifyVersion === capturedVersion) locallyModified = false
+          if (ok) {
+            if (modifyVersion === capturedVersion) {
+              locallyModified = false
+              clearUnsynced(snapshotUid)
+            }
+          } else {
+            // Previously silent: no flag, no retry, no message — the change
+            // existed only in this tab until the next load quietly dropped it.
+            modifyVersion++
+            locallyModified = true
+            onSyncError?.('Abonnement konnte nicht auf dem Server gespeichert werden – lokal gesichert, erneuter Versuch beim nächsten Laden')
+          }
         })
       }
     }, 300)
@@ -285,7 +353,6 @@ export function useSubscriptions(
     }
     if (uid !== oldUid || (token && !oldToken)) {
       session++  // invalidate requests from the previous user/session
-      const tokenJustArrived = !!(token && !oldToken && uid === oldUid)
       if (uid !== oldUid) {
         // Clear all state immediately so user A's data is never visible
         // while user B's content is loading.
@@ -295,7 +362,9 @@ export function useSubscriptions(
         subscriptionEvents.value = []
         subscriptionErrors.value = {}
       }
-      await load(tokenJustArrived)
+      // load() decides on its own whether to merge or replace, based on the
+      // persisted unsynced marker — no need to tell it that a token just arrived.
+      await load()
       fetchAll()
     }
   }, { immediate: true })
