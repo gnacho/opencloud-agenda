@@ -83,6 +83,8 @@ const translations: Record<string, string> = {
   'Copied': 'Kopiert',
   'Close': 'Schließen',
   'Copying is unavailable here — select the address and copy it manually.': 'Kopieren ist hier nicht verfügbar – bitte die Adresse markieren und selbst kopieren.',
+  'Opens directly in a calendar app. Switch to https if your scanner ignores the link.': 'Öffnet direkt in einer Kalender-App. Auf https umschalten, falls dein Scanner den Link ignoriert.',
+  'A plain web link — your browser will show the raw calendar file.': 'Ein normaler Weblink – der Browser zeigt damit nur die rohe Kalenderdatei.',
 }
 
 // Must be read at call time, never captured in a module- or setup-level

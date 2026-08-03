@@ -4,15 +4,32 @@
       <h2>{{ subscription.name }}</h2>
       <p class="hint">{{ t('Scan this code to add the calendar on another device.') }}</p>
 
+      <div class="scheme-switch" role="group">
+        <button
+          :class="{ active: scheme === 'webcal' }"
+          @click="scheme = 'webcal'"
+        >webcal://</button>
+        <button
+          :class="{ active: scheme === 'https' }"
+          @click="scheme = 'https'"
+        >https://</button>
+      </div>
+
+      <p class="hint">
+        {{ scheme === 'webcal'
+          ? t('Opens directly in a calendar app. Switch to https if your scanner ignores the link.')
+          : t('A plain web link — your browser will show the raw calendar file.') }}
+      </p>
+
       <!-- Deliberately black on white in both themes: a QR tinted to match dark
            mode loses contrast and many phone cameras stop recognising it. -->
       <div class="qr-tile">
-        <div ref="qrEl" class="qr" />
+        <canvas ref="qrCanvas" />
       </div>
 
       <label class="url-label">
         {{ t('iCal URL (.ics)') }}
-        <input ref="urlInput" :value="subscription.url" readonly @focus="selectAll" />
+        <input ref="urlInput" :value="shareUrl" readonly @focus="selectAll" />
       </label>
 
       <p v-if="copyState === 'failed'" class="hint warn">
@@ -30,10 +47,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import QrCreator from 'qr-creator'
 import { useI18n } from '@/composables/useI18n'
 import { copyText } from '@/utils/clipboard'
+import { toWebcalUrl } from '@/utils/subscriptionUrl'
 import type { IcsSubscription } from '@/composables/useSubscriptions'
 
 const { t } = useI18n()
@@ -41,15 +59,25 @@ const { t } = useI18n()
 const props = defineProps<{ subscription: IcsSubscription }>()
 defineEmits<{ (e: 'close'): void }>()
 
-const qrEl = ref<HTMLElement | null>(null)
+const qrCanvas = ref<HTMLCanvasElement | null>(null)
 const urlInput = ref<HTMLInputElement | null>(null)
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 
-onMounted(() => {
-  if (!qrEl.value) return
+// webcal by default — that is the whole point of the QR. https stays one click
+// away because a scanner that does not know the scheme may offer nothing at all,
+// and there is no way to detect that from here.
+const scheme = ref<'webcal' | 'https'>('webcal')
+const shareUrl = computed(() =>
+  scheme.value === 'webcal' ? toWebcalUrl(props.subscription.url) : props.subscription.url,
+)
+
+function renderQr() {
+  if (!qrCanvas.value) return
+  // Rendering into the canvas itself, not a wrapper: qr-creator appends a fresh
+  // canvas when handed a plain element, so switching schemes would stack them.
   QrCreator.render(
     {
-      text: props.subscription.url,
+      text: shareUrl.value,
       // 'M' tolerates ~15 % damage — enough for a phone camera at an angle
       // without inflating the code for these fairly long feed URLs.
       ecLevel: 'M',
@@ -65,8 +93,16 @@ onMounted(() => {
       fill: '#000000',
       background: '#ffffff',
     },
-    qrEl.value,
+    qrCanvas.value,
   )
+}
+
+onMounted(renderQr)
+// Re-encode when the scheme is switched, and reset the copy feedback so the
+// button never claims "Copied" for the variant that is no longer shown.
+watch(shareUrl, () => {
+  copyState.value = 'idle'
+  renderQr()
 })
 
 function selectAll() {
@@ -74,7 +110,7 @@ function selectAll() {
 }
 
 async function copy() {
-  copyState.value = (await copyText(props.subscription.url)) ? 'copied' : 'failed'
+  copyState.value = (await copyText(shareUrl.value)) ? 'copied' : 'failed'
   if (copyState.value === 'failed') selectAll()
 }
 </script>
@@ -147,6 +183,34 @@ input {
   font-family: monospace;
 }
 
+.scheme-switch {
+  display: flex;
+  gap: 0;
+  align-self: center;
+}
+
+.scheme-switch button {
+  font-family: monospace;
+  font-size: 0.8rem;
+  padding: 4px 12px;
+  border-radius: 0;
+}
+
+.scheme-switch button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.scheme-switch button:last-child {
+  border-radius: 0 4px 4px 0;
+  border-left: none;
+}
+
+.scheme-switch button.active {
+  background: var(--oc-color-primary, #0082c9);
+  color: #fff;
+  border-color: transparent;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -198,6 +262,12 @@ button.primary:hover {
   }
   button:not(.primary):hover {
     background: #333;
+  }
+  .scheme-switch button.active,
+  .scheme-switch button.active:hover {
+    background: var(--oc-color-primary, #0082c9);
+    color: #fff;
+    border-color: transparent;
   }
 }
 </style>
