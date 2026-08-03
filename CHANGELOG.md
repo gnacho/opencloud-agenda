@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 ### Notes
 - Uses `qr-creator` (5 KB gzip, no dependencies, MIT). The CalendarView chunk grows from 117.2 to 123.3 kB gzip (+5.2 %)
 - The QR is rendered black on white in both themes: tinting it for dark mode costs contrast and many phone cameras then fail to read it
-- `qr-creator` defaults its quiet zone to 0 modules; the spec asks for 4, and without it scanning is unreliable. Set explicitly, with the code sized so each module stays about 5 px wide at the longest feed URL
+- `qr-creator` defaults its quiet zone to 0 modules; the spec asks for 4, and without it scanning is unreliable. Set explicitly. A ~110-character feed URL produces a version-7 code — 45 modules, 53 across with the quiet zone — so the 240 px canvas gives 4.5 px per module, well above what phone cameras need
 - Copying degrades gracefully: without a secure context `navigator.clipboard` is absent, so the dialog says so and selects the address instead of failing silently
 
 ### Tests

@@ -57,8 +57,10 @@ onMounted(() => {
       // margin; without it scanners get unreliable. Not left to the white tile
       // around the canvas, which is only worth about two modules.
       quiet: 4,
-      // A ~110-character feed URL needs a 41-module code; with the quiet zone
-      // that is 49 across, so 240 px keeps every module about 5 px wide.
+      // A ~110-character feed URL lands on a version-7 code: 45 modules, 53
+      // across including the quiet zone, so 240 px gives 4.5 px per module.
+      // Comfortably above the ~3 px phone cameras need; raise this if a longer
+      // URL ever pushes the code to a higher version.
       size: 240,
       fill: '#000000',
       background: '#ffffff',
