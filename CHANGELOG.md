@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.6.0] - 2026-08-03
+
+### Added
+- **Share a subscription to another device** — clicking a subscription's name in the sidebar opens a dialog with its feed URL, a copy button and a QR code. Scanning it on a phone adds the calendar there directly, in the device's own calendar app. Subscriptions live in OpenCloud's file storage, not in Radicale, so they are invisible to CalDAV clients; subscribing per device is the practical route, and this removes the friction of retyping a 100-character Google URL
+
+### Notes
+- Uses `qr-creator` (5 KB gzip, no dependencies, MIT). The CalendarView chunk grows from 117.2 to 123.3 kB gzip (+5.2 %)
+- The QR is rendered black on white in both themes: tinting it for dark mode costs contrast and many phone cameras then fail to read it
+- `qr-creator` defaults its quiet zone to 0 modules; the spec asks for 4, and without it scanning is unreliable. Set explicitly, with the code sized so each module stays about 5 px wide at the longest feed URL
+- Copying degrades gracefully: without a secure context `navigator.clipboard` is absent, so the dialog says so and selects the address instead of failing silently
+
+### Tests
+- 3 tests for the clipboard helper (success, missing API, rejected write). The rendered QR itself is not covered — verify it once by scanning
+
 ## [2.5.1] - 2026-08-03
 
 ### Fixed
