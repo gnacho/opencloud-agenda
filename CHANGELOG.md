@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.5.0] - 2026-08-03
+
+### Fixed
+- **A subscription could vanish without trace if its server write failed** — `persist()` only recorded "local state is ahead" when no token was present at all. When a token existed and the `PUT` failed anyway (server restarting, expired token, tab closed inside the 300 ms debounce window), nothing was recorded: no flag, no retry, no message, and `saveToServer()` swallowed the error. The next page load then replaced the local list with the older server copy **and overwrote the localStorage cache with it**, destroying the entry in both places. Observed in the wild: a feed added while the server was restarting was gone the next day
+- Failed writes are now recorded in a localStorage marker that survives a reload, and `load()` merges the local and server lists by id instead of replacing one with the other. An entry present on only one side is kept — an unsynced deletion may reappear, which is deliberate: a resurrected entry is one click to remove, a lost feed URL is gone for good
+- Failed writes surface as a notification instead of failing silently
+
+### Changed
+- `load()` no longer needs to be told that a token just arrived; it decides between merging and replacing from the persisted marker
+- Pushing local state to the server no longer discards subscriptions that exist only on the server — previously an offline edit on one device wiped entries added on another
+
+### Tests
+- 6 tests covering the reload-survival path, the failure notification, merge semantics, and that a confirmed write lets a deletion made elsewhere stick rather than resurrecting entries forever
+- Three existing expectations updated: they encoded the old replace-wins behaviour that discarded server-only entries
+
 ## [2.4.2] - 2026-08-02
 
 ### Fixed
