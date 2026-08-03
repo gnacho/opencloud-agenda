@@ -122,6 +122,32 @@ External `.ics` feeds cannot be fetched directly from the browser due to CORS re
 
 The proxy lives in its own directory and its own Compose project, deliberately **outside** your OpenCloud compose directory, so that rebuilding or updating OpenCloud cannot remove it.
 
+### Where subscriptions are stored, and what that means for other devices
+
+Subscriptions are **not** CalDAV calendars. They are a list of feed URLs, kept as a single JSON file in your OpenCloud file storage:
+
+```
+/remote.php/dav/files/<userId>/.agenda/subscriptions.json
+```
+
+`localStorage` holds a copy as an offline cache. The events themselves are never stored — they are fetched from the remote feed each time the app loads.
+
+This has one consequence worth knowing up front:
+
+| Where | Subscriptions visible? |
+|---|---|
+| Agenda in any browser, any device, same account | **Yes** — the list is read from the server on every load |
+| Thunderbird, DAVx⁵, phone calendar apps | **No** — those speak CalDAV to Radicale, where the subscriptions do not exist |
+
+Radicale stores events; it does not fetch remote feeds. Putting subscriptions there would mean polling the source and writing the events into a Radicale collection, which needs a service that runs whether or not a browser is open — outside what a web app can do.
+
+**To see the same feed on a phone,** subscribe to the `.ics` URL directly in the device's calendar instead of going through Agenda:
+
+- **Android:** DAVx⁵ supports WebCal subscriptions; Google Calendar has "Add by URL"
+- **iOS:** Settings → Calendar → Accounts → Add Subscribed Calendar
+
+The URLs are all in your `subscriptions.json`, ready to copy.
+
 ### 1. Create the proxy service
 
 ```bash
