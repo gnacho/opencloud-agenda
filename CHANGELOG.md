@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.7.1] - 2026-08-03
+
+### Fixed
+- **Google feed URLs are pointed straight at `calendar.google.com`** — Google hands out subscription URLs under `www.google.com`, which answers `302` with no body and redirects. The Agenda never noticed because the ICS proxy follows redirects, but a subscription app on a phone may not: it accepts the subscription and then shows an empty calendar. Applied both when adding a subscription and when sharing one, so existing entries hand out a working URL without being re-added
+
+### Tests
+- 6 tests for `canonicalFeedUrl`: both schemes, the percent-encoded calendar id left intact, an already canonical URL untouched, and other Google paths and hosts ignored
+
 ## [2.7.0] - 2026-08-03
 
 ### Added
