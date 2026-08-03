@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.7.0] - 2026-08-03
+
+### Added
+- **The share QR now encodes `webcal://`**, with a switch back to `https://` in the dialog. An https QR is just a web link: the phone opens a browser showing raw iCalendar text. `webcal://` is the scheme calendar apps register — Android offers it to a subscription app such as ICSx⁵, iOS prompts to subscribe — so scanning subscribes in one step instead of scan, copy, paste
+- The switch exists because a scanner that does not recognise the scheme may offer nothing at all, and the app cannot detect that. https stays one click away
+
+### Fixed
+- The QR is rendered into a `<canvas>` element rather than a wrapper `<div>`. `qr-creator` appends a fresh canvas when handed a plain element, so switching schemes would have stacked them
+- Copy feedback resets when the scheme is switched, so the button cannot claim "Copied" for the variant no longer on screen
+
+### Notes
+- Subscriptions are still stored with `http(s)`, which is what `fetch()` needs; the scheme swap applies only to what is handed to another device
+
+### Tests
+- 6 tests for `toWebcalUrl` covering both source schemes, percent-encoding left intact (the Google feed ids carry `%40`), only the leading scheme replaced, and unknown schemes passed through
+
 ## [2.6.0] - 2026-08-03
 
 ### Added
