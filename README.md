@@ -110,6 +110,48 @@ Refer to the [OpenCloud web-app-skeleton](https://github.com/opencloud-eu/web-ap
 - ICS subscriptions are fetched server-side via a small Node.js proxy (`/ics-proxy/`) to avoid browser CORS restrictions. The proxy validates the user's Bearer token against OpenCloud, then blocks targets that resolve to private, loopback or link-local addresses before forwarding the request.
 - Subscription responses are checked for a `BEGIN:VCALENDAR` prelude. A misrouted `/ics-proxy/` path answers HTTP 200 with the OpenCloud web SPA's `index.html`, which would otherwise parse to an empty event list and present a broken subscription as an empty but healthy one.
 
+## Theming — read this before touching any colour
+
+> [!IMPORTANT]
+> **Never use `@media (prefers-color-scheme: …)` in this app, and never invent `--oc-color-*` variables.** Both were in here for a long time and made the light theme unusable. The details below explain why, so the mistake is not repeated.
+
+OpenCloud 6.x publishes a Material-3 style set of **role tokens**:
+
+```
+--oc-role-surface            --oc-role-on-surface
+--oc-role-surface-container  --oc-role-on-surface-variant
+--oc-role-primary            --oc-role-on-primary
+--oc-role-error              --oc-role-on-error
+--oc-role-outline            --oc-role-outline-variant
+…45 in total
+```
+
+Their values live in `/themes/opencloud/theme.json` under `clients.web.themes[].designTokens.roles`, one entry per theme, and OpenCloud **rewrites the custom properties in place** when the user switches theme.
+
+Three consequences, each of which cost a bug:
+
+1. **There is no theme class and no media query to hook into.** `.is-dark-mode` exists in OpenCloud's stylesheet but belongs to a single floating-action-button widget — it is not a global switch. Consuming the role tokens is the only way to follow the theme.
+2. **`prefers-color-scheme` follows the operating system, not OpenCloud.** The two agree only by coincidence. OS dark plus OpenCloud light produced a white sidebar around a dark calendar grid.
+3. **`--oc-color-*` does not exist.** Those names silently fall back to whatever literal is written after the comma, so the app looks fine in one theme and is quietly hardcoded in the other.
+
+Pair every surface with its matching `on-` token — in the dark theme `primary` is a light blue (`#5cd5fb`) and white text on it is unreadable, which is exactly what `--oc-role-on-primary` (`#003543`) is for.
+
+**Elevation steps** used here, chosen so the dark theme keeps a visible separation:
+
+| Element | Token | light | dark |
+|---|---|---|---|
+| Dialog, page | `surface` | `#ffffff` | `#191c1d` |
+| Inputs, secondary buttons | `surface-container-high` | `#f2f4f5` | `#272a2c` |
+| Hover | `surface-container-highest` | `#eceef0` | `#323537` |
+
+**FullCalendar** is themed through its own `--fc-*` variables, fed from the role tokens in `CalendarView.vue`. Watch for FullCalendar rules that need `!important` to override — the today marker used to carry a hardcoded brand blue that beat the variable.
+
+**Native controls** (date pickers, selects, scrollbars) obey the CSS `color-scheme` property, which takes a keyword, not a colour. `light dark` hands the choice back to the OS. `CalendarView.vue` therefore derives it from the resolved surface colour via `schemeForBackground()` and re-applies it with a `MutationObserver`, because OpenCloud signals a theme change only by rewriting the properties.
+
+**Deliberately not themed:** the QR tile stays white (a dark tile swallows the quiet zone and phone cameras stop reading the code), modal scrims stay translucent black, and event resize grips stay translucent white because they sit on user-chosen calendar colours.
+
+**Checking a change:** contrast is verifiable without a browser. Resolve every `background`/`color` pair in `dist/assets/*.css` against both palettes from `theme.json` and compute the WCAG ratio; the current build has 34 such pairs, all at or above AA 4.5:1. That catches unreadable combinations, but not spacing or aesthetics — click through both themes as well.
+
 ## Optional: iCal Subscriptions (Experimental)
 
 > [!NOTE]
