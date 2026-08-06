@@ -915,7 +915,10 @@ watch(calendars, () => {
 <style>
 .agenda-event-tooltip {
   position: fixed;
-  z-index: 1100;
+  /* Above FullCalendar's "+N more" popover, which injects z-index: 9999 at
+     runtime — the tooltip is useless if it renders behind the very list the
+     user opened to read the entries. */
+  z-index: 10000;
   max-width: 320px;
   padding: 8px 10px;
   border-radius: 6px;
