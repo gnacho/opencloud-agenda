@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.7.2] - 2026-08-06
+
+### Fixed
+- **The event tooltip appeared behind the "+N more" popover** — FullCalendar injects `z-index: 9999` for `.fc-popover` at runtime, above the tooltip's 1100. On a busy day the tooltip was hidden by the very list opened to read those entries. Raised above it
+
 ## [2.7.1] - 2026-08-03
 
 ### Fixed
