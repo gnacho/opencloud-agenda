@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.0] - 2026-08-06
+
+### Fixed
+- **The light theme was unusable** — every component styled itself from `--oc-color-*` variables that OpenCloud 6.x does not define, so all 77 of them silently fell back to hardcoded literals. To compensate, the app carried 20 `@media (prefers-color-scheme: dark)` blocks, which follow the **operating system**. OpenCloud switches its own theme independently, with no class or media query to key on — it swaps `--oc-role-*` custom properties at runtime. OS dark plus OpenCloud light therefore produced a white sidebar around a dark calendar grid
+- All colours now come from the real `--oc-role-*` tokens, and every `prefers-color-scheme` block is gone. The app follows whatever theme OpenCloud is set to, including custom ones
+- FullCalendar's grid, buttons and today marker are driven from the same tokens through its `--fc-*` variables. The today marker had a hardcoded `!important` brand blue that overrode the variable
+- **Native date pickers and selects followed the OS too** — `color-scheme: light dark` hands that choice to the system. It is now derived from the theme's own surface colour and re-evaluated when OpenCloud swaps the properties
+
+### Notes
+- Deliberately not themed: the QR tile stays white in both themes (a dark tile swallows the quiet zone and phones stop reading the code), the modal scrims stay translucent black, and the resize grips stay translucent white because they sit on user-chosen calendar colours
+- Verified by resolving every background/foreground pair in the built CSS against both themes: 34 combinations, all at or above WCAG AA 4.5:1
+
+### Tests
+- 8 tests for `luminance` and `schemeForBackground`, including the actual OpenCloud surface tokens and the empty-string case that occurs when the role tokens are absent
+
 ## [2.7.2] - 2026-08-06
 
 ### Fixed

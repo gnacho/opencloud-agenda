@@ -1,5 +1,5 @@
 <template>
-  <div class="calendar-view">
+  <div class="calendar-view" ref="rootEl">
     <!-- Sidebar: calendar list -->
     <aside class="sidebar">
       <div class="sidebar-header">
@@ -132,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import FullCalendar from '@fullcalendar/vue3'
 import type { CalendarOptions, EventClickArg, DateSelectArg, DatesSetArg, EventDropArg, EventMountArg } from '@fullcalendar/core'
 import type { EventResizeDoneArg } from '@fullcalendar/interaction'
@@ -154,6 +154,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useMessages } from '@opencloud-eu/web-pkg'
 import type { CalendarEvent } from '@/services/caldav'
 import { addDays, formatEventRange } from '@/utils/eventFormat'
+import { schemeForBackground } from '@/utils/theme'
 
 const { t, isGerman, localeTag } = useI18n()
 // Computed, not a constant: OpenCloud sets documentElement.lang only after the
@@ -296,6 +297,34 @@ const fcEvents = computed(() => {
 function activeCalColor(href: string): string {
   return calendars.value.find(c => href.startsWith(c.href))?.color ?? '#0082c9'
 }
+
+// --- native control theming ---
+// OpenCloud has no theme class to key on, so `color-scheme` — which native date
+// pickers and selects obey — is derived from the theme's own surface colour.
+// Left at the CSS default it follows the operating system, which is how a dark
+// picker ended up inside a light dialog.
+
+const rootEl = ref<HTMLElement | null>(null)
+let themeObserver: MutationObserver | null = null
+
+function syncColorScheme() {
+  if (!rootEl.value) return
+  const surface = getComputedStyle(document.documentElement).getPropertyValue('--oc-role-surface')
+  rootEl.value.style.colorScheme = schemeForBackground(surface)
+}
+
+onMounted(() => {
+  syncColorScheme()
+  // OpenCloud rewrites the custom properties in place when the theme changes;
+  // that shows up as an attribute change on <html>, not as an event.
+  themeObserver = new MutationObserver(syncColorScheme)
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class'] })
+})
+
+onBeforeUnmount(() => {
+  themeObserver?.disconnect()
+  themeObserver = null
+})
 
 // --- hover tooltip ---
 // Month view truncates titles, and subscription events are read-only so there is
@@ -540,12 +569,12 @@ watch(calendars, () => {
 .sidebar {
   width: 220px;
   min-width: 180px;
-  border-right: 1px solid var(--oc-color-border);
+  border-right: 1px solid var(--oc-role-outline-variant);
   display: flex;
   flex-direction: column;
   padding: 1rem 0.75rem;
   gap: 0.5rem;
-  background: var(--oc-color-background-highlight);
+  background: var(--oc-role-surface-container-high);
 }
 
 .sidebar-header {
@@ -558,7 +587,7 @@ watch(calendars, () => {
 .sidebar-title {
   font-weight: 600;
   font-size: 0.9rem;
-  color: var(--oc-color-text-muted);
+  color: var(--oc-role-on-surface-variant);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -568,14 +597,14 @@ watch(calendars, () => {
   border-radius: 4px;
   border: none;
   background: transparent;
-  color: var(--oc-color-text-muted);
+  color: var(--oc-role-on-surface-variant);
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
 }
 
 .btn-reload:hover {
-  background: var(--oc-color-background-default);
+  background: var(--oc-role-surface);
 }
 
 .btn-reload.spinning {
@@ -586,8 +615,8 @@ watch(calendars, () => {
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
   border: none;
-  background: var(--oc-color-swatch-brand-default);
-  color: #fff;
+  background: var(--oc-role-primary);
+  color: var(--oc-role-on-primary, #fff);
   cursor: pointer;
   font-size: 0.85rem;
 }
@@ -602,7 +631,7 @@ watch(calendars, () => {
 .calendars-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--oc-color-text-muted);
+  color: var(--oc-role-on-surface-variant);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -610,16 +639,16 @@ watch(calendars, () => {
 .btn-new-cal {
   padding: 0.1rem 0.45rem;
   border-radius: 4px;
-  border: 1px solid var(--oc-color-border, #ccc);
+  border: 1px solid var(--oc-role-outline-variant, #ccc);
   background: transparent;
-  color: var(--oc-color-text-default);
+  color: var(--oc-role-on-surface);
   cursor: pointer;
   font-size: 1rem;
   line-height: 1.2;
 }
 
 .btn-new-cal:hover {
-  background: var(--oc-color-background-default);
+  background: var(--oc-role-surface);
 }
 
 .calendar-list {
@@ -639,12 +668,12 @@ watch(calendars, () => {
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
-  color: var(--oc-color-text-default);
+  color: var(--oc-role-on-surface);
 }
 
 .calendar-list li:hover,
 .calendar-list li.active {
-  background: var(--oc-color-background-default);
+  background: var(--oc-role-surface);
 }
 
 .cal-dot {
@@ -673,10 +702,10 @@ watch(calendars, () => {
   flex: 1;
   font-size: 0.9rem;
   padding: 0 2px;
-  border: 1px solid var(--oc-color-swatch-brand-default);
+  border: 1px solid var(--oc-role-primary);
   border-radius: 3px;
-  background: var(--oc-color-background-default);
-  color: var(--oc-color-text-default);
+  background: var(--oc-role-surface);
+  color: var(--oc-role-on-surface);
   outline: none;
   min-width: 0;
 }
@@ -685,7 +714,7 @@ watch(calendars, () => {
   margin-left: auto;
   background: none;
   border: none;
-  color: var(--oc-color-text-muted);
+  color: var(--oc-role-on-surface-variant);
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
@@ -724,8 +753,8 @@ watch(calendars, () => {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid var(--oc-color-border, #d0d0d0);
-  border-top-color: var(--oc-color-swatch-brand-default, #0082c9);
+  border: 3px solid var(--oc-role-outline-variant, #d0d0d0);
+  border-top-color: var(--oc-role-primary, #0082c9);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -735,7 +764,7 @@ watch(calendars, () => {
 }
 
 .error-msg {
-  color: var(--oc-color-swatch-danger-default);
+  color: var(--oc-role-error);
   font-size: 0.8rem;
 }
 
@@ -746,7 +775,7 @@ watch(calendars, () => {
 
 .help-link {
   font-size: 0.8rem;
-  color: var(--oc-color-text-muted);
+  color: var(--oc-role-on-surface-variant);
   opacity: 0.7;
   background: none;
   border: none;
@@ -760,84 +789,61 @@ watch(calendars, () => {
   text-decoration: underline;
 }
 
-/* ---- FullCalendar dark mode overrides ---- */
+/* ---- FullCalendar theming, driven by the OpenCloud role tokens ---- */
 :deep(.fc) {
-  --fc-border-color: #d0d0d0;
-  --fc-page-bg-color: var(--oc-color-background-default);
-  --fc-neutral-bg-color: var(--oc-color-background-highlight);
-  --fc-neutral-text-color: var(--oc-color-text-muted);
-  --fc-today-bg-color: color-mix(in srgb, var(--oc-color-swatch-brand-default) 10%, transparent);
-  --fc-button-bg-color: var(--oc-color-background-highlight);
-  --fc-button-border-color: #d0d0d0;
-  --fc-button-hover-bg-color: var(--oc-color-background-default);
-  --fc-button-hover-border-color: #b0b0b0;
-  --fc-button-active-bg-color: var(--oc-color-swatch-brand-default);
-  --fc-button-active-border-color: var(--oc-color-swatch-brand-default);
-  --fc-button-text-color: var(--oc-color-text-default);
-  --fc-list-event-hover-bg-color: var(--oc-color-background-highlight);
-  color: var(--oc-color-text-default);
-}
-
-@media (prefers-color-scheme: dark) {
-  :deep(.fc) {
-    --fc-border-color: #3a3a3a;
-    --fc-button-border-color: #3a3a3a;
-    --fc-button-hover-border-color: #555;
-  }
+  --fc-border-color: var(--oc-role-outline-variant, #d0d0d0);
+  --fc-page-bg-color: var(--oc-role-surface);
+  --fc-neutral-bg-color: var(--oc-role-surface-container-high);
+  --fc-neutral-text-color: var(--oc-role-on-surface-variant);
+  --fc-today-bg-color: color-mix(in srgb, var(--oc-role-primary) 10%, transparent);
+  --fc-button-bg-color: var(--oc-role-surface-container-high);
+  --fc-button-border-color: var(--oc-role-outline-variant, #d0d0d0);
+  --fc-button-hover-bg-color: var(--oc-role-surface);
+  --fc-button-hover-border-color: var(--oc-role-outline, #b0b0b0);
+  --fc-button-active-bg-color: var(--oc-role-primary);
+  --fc-button-active-border-color: var(--oc-role-primary);
+  --fc-button-text-color: var(--oc-role-on-surface);
+  --fc-list-event-hover-bg-color: var(--oc-role-surface-container-high);
+  color: var(--oc-role-on-surface);
 }
 
 :deep(.fc .fc-button-primary:not(:disabled).fc-button-active),
 :deep(.fc .fc-button-primary:not(:disabled):active) {
-  color: #fff;
+  color: var(--oc-role-on-primary, #fff);
 }
 
 :deep(.fc .fc-col-header-cell-cushion),
 :deep(.fc .fc-daygrid-day-number),
 :deep(.fc .fc-list-day-cushion),
 :deep(.fc a) {
-  color: var(--oc-color-text-default);
+  color: var(--oc-role-on-surface);
 }
 
 :deep(.fc .fc-toolbar-title) {
-  color: var(--oc-color-text-default);
+  color: var(--oc-role-on-surface);
   font-size: 1.1rem;
 }
 
 :deep(.fc .fc-list-empty) {
-  background: var(--oc-color-background-default);
-  color: var(--oc-color-text-muted);
+  background: var(--oc-role-surface);
+  color: var(--oc-role-on-surface-variant);
 }
 
 /* Day cell backgrounds — light mode */
 :deep(.fc-daygrid-day) {
-  background: #f9f9f9;
+  background: var(--oc-role-surface-container, #f9f9f9);
 }
 :deep(.fc-daygrid-day:hover) {
-  background: #f0f0f0;
+  background: var(--oc-role-surface-container-high, #f0f0f0);
 }
 :deep(.fc-day-other) {
-  background: #f3f3f3;
+  background: var(--oc-role-surface-container-high, #f3f3f3);
   opacity: 0.6;
 }
 :deep(.fc-day-today.fc-daygrid-day) {
-  background: rgba(0, 130, 201, 0.1) !important;
-}
-
-/* Day cell backgrounds — dark mode */
-@media (prefers-color-scheme: dark) {
-  :deep(.fc-daygrid-day) {
-    background: #2a2a2a;
-  }
-  :deep(.fc-daygrid-day:hover) {
-    background: #333333;
-  }
-  :deep(.fc-day-other) {
-    background: #222222;
-    opacity: 0.7;
-  }
-  :deep(.fc-day-today.fc-daygrid-day) {
-    background: rgba(0, 130, 201, 0.35) !important;
-  }
+  /* !important is needed to beat FullCalendar's own rule, which is why this
+     cannot simply rely on --fc-today-bg-color set above. */
+  background: color-mix(in srgb, var(--oc-role-primary, #0082c9) 10%, transparent) !important;
 }
 
 /* Recurring event indicator */
@@ -847,8 +853,6 @@ watch(calendars, () => {
   font-size: 0.8em;
   opacity: 0.75;
 }
-
-/* Resize handles — make them visible especially in dark mode */
 
 /* timeGrid (week/day): bar at bottom of timed events */
 :deep(.fc-timegrid-event .fc-event-resizer-end::after) {
@@ -897,18 +901,6 @@ watch(calendars, () => {
 :deep(.fc-icon-plus::before)  { content: '+' !important; }
 :deep(.fc-icon-x::before)     { content: '×' !important; }
 
-/* "+N more" popover — dark mode */
-@media (prefers-color-scheme: dark) {
-  :deep(.fc-popover) {
-    background: #2a2a2a;
-    border-color: #3a3a3a;
-    color: var(--oc-color-text-default);
-  }
-  :deep(.fc-popover-header) {
-    background: #333;
-    color: var(--oc-color-text-default);
-  }
-}
 </style>
 
 <!-- Not scoped: the tooltip is mounted on <body>, outside this component's subtree. -->
@@ -922,9 +914,9 @@ watch(calendars, () => {
   max-width: 320px;
   padding: 8px 10px;
   border-radius: 6px;
-  border: 1px solid var(--oc-color-border, #ddd);
-  background: var(--oc-color-background-default, #fff);
-  color: var(--oc-color-text-default, #222);
+  border: 1px solid var(--oc-role-outline-variant, #ddd);
+  background: var(--oc-role-surface, #fff);
+  color: var(--oc-role-on-surface, #222);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
   font-size: 0.82rem;
   line-height: 1.35;
@@ -956,19 +948,9 @@ watch(calendars, () => {
 .agenda-event-tooltip .tt-desc {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--oc-color-border, #e5e5e5);
+  border-top: 1px solid var(--oc-role-outline-variant, #e5e5e5);
   white-space: pre-wrap;
   opacity: 0.9;
 }
 
-@media (prefers-color-scheme: dark) {
-  .agenda-event-tooltip {
-    background: #2a2a2a;
-    border-color: #3a3a3a;
-    color: #e8e8e8;
-  }
-  .agenda-event-tooltip .tt-desc {
-    border-top-color: #3a3a3a;
-  }
-}
 </style>

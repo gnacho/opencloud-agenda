@@ -321,9 +321,9 @@ function handleDeleteOccurrence() {
 }
 
 .event-dialog {
-  background: #fff;
-  color: #1a1a1a;
-  border: 1px solid #ddd;
+  background: var(--oc-role-surface, #fff);
+  color: var(--oc-role-on-surface, #1a1a1a);
+  border: 1px solid var(--oc-role-outline-variant, #ddd);
   border-radius: 8px;
   padding: 1.5rem;
   width: 480px;
@@ -332,14 +332,6 @@ function handleDeleteOccurrence() {
   flex-direction: column;
   gap: 0.75rem;
   box-shadow: 0 4px 32px rgba(0, 0, 0, 0.35);
-}
-
-@media (prefers-color-scheme: dark) {
-  .event-dialog {
-    background: #1e1e1e;
-    color: #e8e8e8;
-    border-color: #444;
-  }
 }
 
 h2 {
@@ -354,13 +346,7 @@ label {
   gap: 0.25rem;
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--oc-color-text-muted, #666);
-}
-
-@media (prefers-color-scheme: dark) {
-  label {
-    color: var(--oc-color-text-muted, #aaa);
-  }
+  color: var(--oc-role-on-surface-variant, #666);
 }
 
 label.row {
@@ -375,24 +361,12 @@ input[type='datetime-local'],
 select,
 textarea {
   padding: 0.4rem 0.6rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--oc-role-outline-variant, #ccc);
   border-radius: 4px;
   font-size: 0.95rem;
   font-family: inherit;
-  background: #f5f5f5;
-  color: #1a1a1a;
-}
-
-@media (prefers-color-scheme: dark) {
-  input[type='text'],
-  input[type='date'],
-  input[type='datetime-local'],
-  select,
-  textarea {
-    background: #2a2a2a;
-    color: #e8e8e8;
-    border-color: #555;
-  }
+  background: var(--oc-role-surface-container-high, #f5f5f5);
+  color: var(--oc-role-on-surface, #1a1a1a);
 }
 
 input[type='text']:focus,
@@ -401,15 +375,12 @@ input[type='datetime-local']:focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--oc-color-swatch-brand-default, #0082c9);
+  border-color: var(--oc-role-primary, #0082c9);
   box-shadow: 0 0 0 2px rgba(0, 130, 201, 0.25);
 }
 
-/* color-scheme so browser date-pickers respect dark mode */
-input[type='date'],
-input[type='datetime-local'] {
-  color-scheme: light dark;
-}
+/* color-scheme is inherited from .calendar-view, where it is derived from the
+   OpenCloud theme — `light dark` here would hand the choice back to the OS. */
 
 textarea {
   resize: vertical;
@@ -435,35 +406,21 @@ textarea {
 button {
   padding: 0.4rem 1rem;
   border-radius: 4px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--oc-role-outline-variant, #ccc);
   cursor: pointer;
   font-size: 0.9rem;
   font-family: inherit;
-  background: #f0f0f0;
-  color: #1a1a1a;
+  background: var(--oc-role-surface-container-high, #f0f0f0);
+  color: var(--oc-role-on-surface, #1a1a1a);
 }
 
 button:hover {
-  background: #e0e0e0;
-}
-
-/* Must come after the light-mode rules above: a media query adds no specificity,
-   so a later `button:hover` would win even in dark mode — which turned the
-   hovered button light grey while its text stayed near-white. */
-@media (prefers-color-scheme: dark) {
-  button {
-    background: #2a2a2a;
-    color: #e8e8e8;
-    border-color: #555;
-  }
-  button:hover {
-    background: #333;
-  }
+  background: var(--oc-role-surface-container-highest, #e0e0e0);
 }
 
 button.primary {
-  background: var(--oc-color-swatch-brand-default, #0082c9);
-  color: #fff;
+  background: var(--oc-role-primary, #0082c9);
+  color: var(--oc-role-on-primary, #fff);
   border-color: transparent;
 }
 
@@ -472,8 +429,8 @@ button.primary:hover {
 }
 
 button.danger {
-  background: var(--oc-color-swatch-danger-default, #e9322d);
-  color: #fff;
+  background: var(--oc-role-error, #e9322d);
+  color: var(--oc-role-on-error, #fff);
   border-color: transparent;
 }
 
@@ -482,7 +439,7 @@ button.danger:hover {
 }
 
 .error-msg {
-  color: var(--oc-color-swatch-danger-default, #e9322d);
+  color: var(--oc-role-error, #e9322d);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -530,7 +487,7 @@ button.danger:hover {
 .series-note {
   margin: 0;
   font-size: 0.8rem;
-  color: var(--oc-color-text-muted, #888);
+  color: var(--oc-role-on-surface-variant, #888);
   font-style: italic;
 }
 

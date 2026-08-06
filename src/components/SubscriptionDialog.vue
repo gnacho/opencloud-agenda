@@ -86,7 +86,7 @@ function submit() {
 }
 
 .dialog {
-  background: var(--oc-color-background-default, #fff);
+  background: var(--oc-role-surface, #fff);
   border-radius: 8px;
   padding: 24px;
   min-width: 340px;
@@ -96,13 +96,6 @@ function submit() {
   flex-direction: column;
   gap: 14px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
-}
-
-@media (prefers-color-scheme: dark) {
-  .dialog {
-    background: #1e1e1e;
-    color: #e8e8e8;
-  }
 }
 
 h2 {
@@ -122,20 +115,11 @@ label {
 input[type='text'],
 input[type='url'] {
   padding: 6px 8px;
-  border: 1px solid var(--oc-color-border, #ddd);
+  border: 1px solid var(--oc-role-outline-variant, #ddd);
   border-radius: 4px;
-  background: var(--oc-color-background-default, #fff);
+  background: var(--oc-role-surface-container-high, #f5f5f5);
   color: inherit;
   font-size: 0.9rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  input[type='text'],
-  input[type='url'] {
-    background: #2a2a2a;
-    color: #e8e8e8;
-    border-color: #555;
-  }
 }
 
 input[type='color'] {
@@ -148,7 +132,7 @@ input[type='color'] {
 }
 
 .error-msg {
-  color: var(--oc-color-status-danger, #c0392b);
+  color: var(--oc-role-error, #c0392b);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -163,24 +147,16 @@ input[type='color'] {
 button {
   padding: 6px 16px;
   border-radius: 4px;
-  border: 1px solid var(--oc-color-border, #ddd);
-  background: var(--oc-color-background-default, #fff);
+  border: 1px solid var(--oc-role-outline-variant, #ddd);
+  background: var(--oc-role-surface-container-high, #f5f5f5);
   color: inherit;
   cursor: pointer;
   font-size: 0.9rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  button:not(.primary) {
-    background: #2a2a2a;
-    color: #e8e8e8;
-    border-color: #555;
-  }
-}
-
 button.primary {
-  background: var(--oc-color-primary, #0082c9);
-  color: #fff;
+  background: var(--oc-role-primary, #0082c9);
+  color: var(--oc-role-on-primary, #fff);
   border-color: transparent;
 }
 

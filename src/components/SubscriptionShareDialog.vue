@@ -132,7 +132,7 @@ async function copy() {
 }
 
 .dialog {
-  background: var(--oc-color-background-default, #fff);
+  background: var(--oc-role-surface, #fff);
   border-radius: 8px;
   padding: 24px;
   min-width: 300px;
@@ -160,11 +160,14 @@ h2 {
 
 .hint.warn {
   opacity: 1;
-  color: var(--oc-color-status-danger, #c0392b);
+  color: var(--oc-role-error, #c0392b);
 }
 
 .qr-tile {
   align-self: center;
+  /* Not themed on purpose. The canvas draws a black-on-white code, so the tile
+     around it must stay white in both themes — a dark tile would swallow the
+     quiet zone and phone cameras stop finding the code. */
   background: #fff;
   padding: 10px;
   border-radius: 6px;
@@ -180,9 +183,9 @@ h2 {
 
 input {
   padding: 6px 8px;
-  border: 1px solid var(--oc-color-border, #ddd);
+  border: 1px solid var(--oc-role-outline-variant, #ddd);
   border-radius: 4px;
-  background: var(--oc-color-background-default, #fff);
+  background: var(--oc-role-surface-container-high, #f5f5f5);
   color: inherit;
   font-size: 0.8rem;
   font-family: monospace;
@@ -211,8 +214,8 @@ input {
 }
 
 .scheme-switch button.active {
-  background: var(--oc-color-primary, #0082c9);
-  color: #fff;
+  background: var(--oc-role-primary, #0082c9);
+  color: var(--oc-role-on-primary, #fff);
   border-color: transparent;
 }
 
@@ -226,53 +229,26 @@ input {
 button {
   padding: 6px 16px;
   border-radius: 4px;
-  border: 1px solid var(--oc-color-border, #ddd);
-  background: var(--oc-color-background-default, #fff);
+  border: 1px solid var(--oc-role-outline-variant, #ddd);
+  background: var(--oc-role-surface-container-high, #f5f5f5);
   color: inherit;
   cursor: pointer;
   font-size: 0.9rem;
 }
 
 button:hover {
-  background: #e0e0e0;
+  background: var(--oc-role-surface-container-highest, #e0e0e0);
 }
 
 button.primary {
-  background: var(--oc-color-primary, #0082c9);
-  color: #fff;
+  background: var(--oc-role-primary, #0082c9);
+  color: var(--oc-role-on-primary, #fff);
   border-color: transparent;
 }
 
 button.primary:hover {
   opacity: 0.9;
-  background: var(--oc-color-primary, #0082c9);
+  background: var(--oc-role-primary, #0082c9);
 }
 
-/* Last, so it outranks the light-mode rules above — a media query adds no
-   specificity, and the same ordering slip made buttons unreadable in 2.4.1. */
-@media (prefers-color-scheme: dark) {
-  .dialog {
-    background: #1e1e1e;
-    color: #e8e8e8;
-  }
-  input {
-    background: #2a2a2a;
-    color: #e8e8e8;
-    border-color: #555;
-  }
-  button:not(.primary) {
-    background: #2a2a2a;
-    color: #e8e8e8;
-    border-color: #555;
-  }
-  button:not(.primary):hover {
-    background: #333;
-  }
-  .scheme-switch button.active,
-  .scheme-switch button.active:hover {
-    background: var(--oc-color-primary, #0082c9);
-    color: #fff;
-    border-color: transparent;
-  }
-}
 </style>
