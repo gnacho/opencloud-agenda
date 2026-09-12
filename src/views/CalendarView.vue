@@ -795,7 +795,7 @@ watch(calendars, () => {
   --fc-page-bg-color: var(--oc-role-surface);
   --fc-neutral-bg-color: var(--oc-role-surface-container-high);
   --fc-neutral-text-color: var(--oc-role-on-surface-variant);
-  --fc-today-bg-color: color-mix(in srgb, var(--oc-role-primary) 10%, transparent);
+  --fc-today-bg-color: color-mix(in srgb, var(--oc-role-primary) 14%, transparent);
   --fc-button-bg-color: var(--oc-role-surface-container-high);
   --fc-button-border-color: var(--oc-role-outline-variant, #d0d0d0);
   --fc-button-hover-bg-color: var(--oc-role-surface);
@@ -843,7 +843,25 @@ watch(calendars, () => {
 :deep(.fc-day-today.fc-daygrid-day) {
   /* !important is needed to beat FullCalendar's own rule, which is why this
      cannot simply rely on --fc-today-bg-color set above. */
-  background: color-mix(in srgb, var(--oc-role-primary, #0082c9) 10%, transparent) !important;
+  background: color-mix(in srgb, var(--oc-role-primary, #0082c9) 14%, transparent) !important;
+}
+
+/* A wash of primary over the cell is all the tint can be — any stronger and the
+   event chips sitting on it lose contrast — and that is too little to pick out
+   of a 42-cell grid at a glance, in either theme. The date itself therefore
+   carries the marker: a filled pill in primary, paired with
+   --oc-role-on-primary because the dark theme's primary is a light blue that
+   white digits vanish into. */
+:deep(.fc .fc-daygrid-day-number) {
+  min-width: 1.7em;
+  padding: 0.1em 0.4em;
+  border-radius: 999px;
+  text-align: center;
+}
+:deep(.fc .fc-day-today .fc-daygrid-day-number) {
+  background: var(--oc-role-primary, #0082c9);
+  color: var(--oc-role-on-primary, #fff);
+  font-weight: 700;
 }
 
 /* Recurring event indicator */
