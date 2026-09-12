@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.1] - 2026-09-12
+
+### Changed
+- **The current day was hard to spot in the month view** — the only marker was a 10 % wash of `--oc-role-primary` over the cell, a few percent of lightness against a near-white or near-black grid in either theme. The date itself now carries the marker: a filled pill in `primary` with `--oc-role-on-primary` digits, bold. The tint stays, raised to 14 % — stronger would cost the event chips sitting on that cell their contrast, which is why the pill does the work. `--fc-today-bg-color` moves to the same 14 % so the week and day views do not drift from the month
+
 ## [2.8.0] - 2026-08-06
 
 ### Fixed
