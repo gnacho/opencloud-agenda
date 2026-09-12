@@ -146,6 +146,8 @@ Pair every surface with its matching `on-` token — in the dark theme `primary`
 
 **FullCalendar** is themed through its own `--fc-*` variables, fed from the role tokens in `CalendarView.vue`. Watch for FullCalendar rules that need `!important` to override — the today marker used to carry a hardcoded brand blue that beat the variable.
 
+**The today marker** is the day number itself: a filled pill in `primary` with `--oc-role-on-primary` digits, set in `CalendarView.vue` on `.fc-day-today .fc-daygrid-day-number`. The cell keeps a 14 % wash of `primary` as a secondary cue, and that 14 % is a ceiling, not a starting point — event chips sit on that cell and lose their contrast as the tint grows. A marker that is hard to see is fixed on the date, not by darkening the cell. Both values live next to each other; keep `--fc-today-bg-color` in step with the `.fc-day-today.fc-daygrid-day` rule, or the week and day views drift away from the month.
+
 **Native controls** (date pickers, selects, scrollbars) obey the CSS `color-scheme` property, which takes a keyword, not a colour. `light dark` hands the choice back to the OS. `CalendarView.vue` therefore derives it from the resolved surface colour via `schemeForBackground()` and re-applies it with a `MutationObserver`, because OpenCloud signals a theme change only by rewriting the properties.
 
 **Deliberately not themed:** the QR tile stays white (a dark tile swallows the quiet zone and phone cameras stop reading the code), modal scrims stay translucent black, and event resize grips stay translucent white because they sit on user-chosen calendar colours.
