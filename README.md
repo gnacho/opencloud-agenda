@@ -1,6 +1,6 @@
 # opencloud-agenda
 
-A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, built as a native web extension using the OpenCloud Extension SDK.
+A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 8.x, built as a native web extension using the OpenCloud Extension SDK.
 
 [![AI Assisted](https://img.shields.io/badge/AI%20assisted-Claude%20Code-orange?logo=anthropic)](https://claude.ai) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -30,7 +30,7 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 6.x, bui
 
 ## Requirements
 
-- OpenCloud 6.x with Radicale enabled (CalDAV at `/caldav/`)
+- OpenCloud 8.x with Radicale enabled (CalDAV at `/caldav/`)
 
 ## Installation
 
@@ -115,7 +115,7 @@ Refer to the [OpenCloud web-app-skeleton](https://github.com/opencloud-eu/web-ap
 > [!IMPORTANT]
 > **Never use `@media (prefers-color-scheme: …)` in this app, and never invent `--oc-color-*` variables.** Both were in here for a long time and made the light theme unusable. The details below explain why, so the mistake is not repeated.
 
-OpenCloud 6.x publishes a Material-3 style set of **role tokens**:
+OpenCloud publishes a Material-3 style set of **role tokens**:
 
 ```
 --oc-role-surface            --oc-role-on-surface
