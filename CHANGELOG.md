@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.9.0] - 2026-09-16
+
+### Changed
+- **Built against OpenCloud 8** — `@opencloud-eu/extension-sdk`, `web-client` and `web-pkg` move from 6.1.0 to ^8.0.0. None of the APIs removed or renamed in Web 8.0.0 (`ConfigStore.isOIDC`/`isOAuth2`, the file and space action composables, `VisiblityObserver`, …) are used by the app, so no code changes were needed
+- README now names OpenCloud 8.x as the target version
+
 ## [2.8.1] - 2026-09-12
 
 ### Changed
