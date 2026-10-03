@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { escapeXml, escapeIcs, buildIcs, parseEvents, newEventHref } from './caldav'
+import {
+  escapeXml, escapeIcs, buildIcs, parseEvents, newEventHref,
+  safeColor, safeRrule, resolveHref, newExpansionBudget, CalDavClient,
+} from './caldav'
 
 describe('escapeXml', () => {
   it('escapes ampersand', () => expect(escapeXml('a & b')).toBe('a &amp; b'))
@@ -227,5 +230,171 @@ DTSTAMP:20260101T000000Z
     `)
     const events = parseEvents(ics, href)
     expect(events[0].title).toBe('(no title)')
+  })
+})
+
+describe('safeColor', () => {
+  it.each(['#abc', '#abcd', '#0082c9', '#0082C9FF', 'red', 'RebeccaPurple'])('accepts %s', (c) =>
+    expect(safeColor(c)).toBe(c))
+  it('trims whitespace', () => expect(safeColor('  #fff \n')).toBe('#fff'))
+
+  // Regression: colours from calendar-color, ICS COLOR and subscriptions.json
+  // went straight into `background:`, where url(...) makes the browser fetch it.
+  it.each([
+    'url(https://tracker.example/p.gif)',
+    'red url(https://tracker.example/p.gif)',
+    'var(--x)',
+    'rgb(0 0 0)',
+    '#12345',
+    '#ggg',
+    '',
+  ])('rejects %s', (c) => expect(safeColor(c)).toBeUndefined())
+  it.each([null, undefined, 42, {}])('rejects non-string %s', (c) => expect(safeColor(c)).toBeUndefined())
+})
+
+describe('safeRrule', () => {
+  it('keeps a valid rule', () =>
+    expect(safeRrule('FREQ=MONTHLY;UNTIL=20271231T000000Z')).toBe('FREQ=MONTHLY;UNTIL=20271231T000000Z'))
+  it('returns undefined for empty input', () => expect(safeRrule(undefined)).toBeUndefined())
+  it('drops a rule without a valid FREQ', () => expect(safeRrule('garbage')).toBeUndefined())
+  it('drops a rule with an injected line break', () =>
+    expect(safeRrule('FREQ=DAILY\r\nATTACH:http://x')).toBeUndefined())
+})
+
+describe('buildIcs — values from foreign ICS data', () => {
+  const ev = {
+    uid: 'u1',
+    title: 'T',
+    start: new Date('2026-04-06T09:00:00Z'),
+    end: new Date('2026-04-06T10:00:00Z'),
+    allDay: false,
+  }
+  const lines = (ics: string) => ics.split('\r\n').filter(Boolean)
+
+  // Regression: UID, COLOR and RRULE were written raw. A UID parsed from a
+  // crafted ICS (TEXT, so \n decodes to a real line break) added properties
+  // or whole components when the event was saved again.
+  it('escapes a line break in the UID instead of starting a new property', () => {
+    const out = lines(buildIcs({ ...ev, uid: 'x\nATTACH:http://evil.example/a' }))
+    expect(out).toContain('UID:x\\nATTACH:http://evil.example/a')
+    expect(out.some(l => l.startsWith('ATTACH'))).toBe(false)
+  })
+
+  it('cannot close the VEVENT through the UID', () => {
+    const out = lines(buildIcs({ ...ev, seriesUid: 'x\nEND:VEVENT\nBEGIN:VEVENT' }))
+    expect(out.filter(l => l === 'BEGIN:VEVENT')).toHaveLength(1)
+  })
+
+  it('drops a COLOR that is not a plain colour', () => {
+    const out = lines(buildIcs({ ...ev, color: 'red\nATTACH:x' }))
+    expect(out.some(l => l.startsWith('COLOR') || l.startsWith('ATTACH'))).toBe(false)
+  })
+
+  it('writes a valid COLOR', () => expect(lines(buildIcs({ ...ev, color: '#e67e22' }))).toContain('COLOR:#e67e22'))
+
+  it('drops an RRULE carrying a line break', () => {
+    const out = lines(buildIcs({ ...ev, rrule: 'FREQ=DAILY\r\nATTACH:x' }))
+    expect(out.some(l => l.startsWith('RRULE') || l.startsWith('ATTACH'))).toBe(false)
+  })
+})
+
+describe('parseEvents — expansion budget', () => {
+  const href = 'https://cal.example.com/events/feed.ics'
+
+  function feed(count: number, rrule: string, dtstart = '19000101T000000Z'): string {
+    const ev = (i: number) =>
+      `BEGIN:VEVENT\r\nUID:e${i}\r\nDTSTART:${dtstart}\r\nDTEND:${dtstart}\r\nRRULE:${rrule}\r\nSUMMARY:x\r\nEND:VEVENT`
+    return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${Array.from({ length: count }, (_, i) => ev(i)).join('\r\n')}\r\nEND:VCALENDAR\r\n`
+  }
+
+  // Regression: the step limit applied per event only, so a feed full of
+  // FREQ=MINUTELY events starting in 1900 froze the tab for minutes.
+  it('stops expanding once the shared step budget is spent', () => {
+    const budget = newExpansionBudget()
+    const started = performance.now()
+    parseEvents(feed(50, 'FREQ=MINUTELY'), href, undefined, budget)
+    expect(budget.steps).toBe(0)
+    expect(performance.now() - started).toBeLessThan(5000)
+  })
+
+  it('shares the budget between calls', () => {
+    const budget = { steps: 10, results: 100 }
+    parseEvents(feed(1, 'FREQ=MINUTELY'), href, undefined, budget)
+    expect(budget.steps).toBe(0)
+    expect(parseEvents(feed(1, 'FREQ=DAILY', '20260101T090000Z'), href, undefined, budget)).toEqual([])
+  })
+
+  it('caps the number of returned events', () => {
+    const budget = { steps: 100_000, results: 3 }
+    const events = parseEvents(feed(1, 'FREQ=DAILY;COUNT=10', '20260101T090000Z'), href, undefined, budget)
+    expect(events).toHaveLength(3)
+    expect(budget.results).toBe(0)
+  })
+
+  it('ignores an ICS COLOR that is not a plain colour', () => {
+    const ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:c\r\nDTSTART:20260101T090000Z\r\n' +
+      'DTEND:20260101T100000Z\r\nCOLOR:url(https://tracker.example/p.gif)\r\nSUMMARY:x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    expect(parseEvents(ics, href)[0].color).toBeUndefined()
+  })
+})
+
+describe('resolveHref', () => {
+  const scope = 'https://cloud.example/caldav/u1/personal/'
+
+  it('resolves a server-relative href', () =>
+    expect(resolveHref('/caldav/u1/personal/a.ics', scope, scope)).toBe(`${scope}a.ics`))
+  it('accepts an absolute href on the same origin', () =>
+    expect(resolveHref(`${scope}a.ics`, scope, scope)).toBe(`${scope}a.ics`))
+
+  // Regression: absolute hrefs from PROPFIND/REPORT were used as-is, so a
+  // response could direct requests carrying the app token to any host.
+  it.each([
+    'https://evil.example/caldav/u1/personal/a.ics',
+    '//evil.example/a.ics',
+    '/caldav/u1/personal-other/a.ics',
+    '/caldav/u1/personal/../../u2/work/a.ics',
+    '/caldav/u1/personal/%2e%2e/%2e%2e/u2/a.ics',
+    '/caldav/u1/personal/x%2F..%2Fy.ics',
+    '/remote.php/dav/files/u1/x.ics',
+  ])('rejects %s', (href) => expect(resolveHref(href, scope, scope)).toBeNull())
+})
+
+describe('CalDavClient — origin guard', () => {
+  const fetchMock = vi.fn()
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  const client = () => new CalDavClient('https://cloud.example', 'u1', 'alice', 'apptoken')
+
+  it('refuses to send the app token to another origin', async () => {
+    await expect(client().deleteEvent({
+      uid: 'x', title: 'x', start: new Date(), end: new Date(), allDay: false,
+      calendarHref: 'https://evil.example/x.ics',
+    })).rejects.toThrow(/refused/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  // fetchEvents (REPORT) is not exercised here: happy-dom's DOMParser does not
+  // resolve namespaced elements, so getElementsByTagNameNS('DAV:', …) finds
+  // nothing. Its href check is the same resolveHref call tested above.
+
+  it('drops calendars outside the user collection and unsafe colours', async () => {
+    const cal = (href: string, color: string) =>
+      `<d:response><d:href>${href}</d:href><d:propstat><d:prop><d:resourcetype><d:collection/><c:calendar/></d:resourcetype>` +
+      `<d:displayname>Cal</d:displayname><oc:calendar-color>${color}</oc:calendar-color></d:prop></d:propstat></d:response>`
+    fetchMock.mockResolvedValue(new Response(
+      `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:oc="http://owncloud.org/ns">` +
+      cal('/caldav/u1/personal/', 'url(https://tracker.example/p.gif)') +
+      cal('https://evil.example/caldav/u1/work/', '#fff') +
+      `</d:multistatus>`,
+      { status: 207 },
+    ))
+    const calendars = await client().listCalendars()
+    expect(calendars).toEqual([
+      { href: 'https://cloud.example/caldav/u1/personal/', displayName: 'Cal', color: undefined, ctag: undefined },
+    ])
   })
 })

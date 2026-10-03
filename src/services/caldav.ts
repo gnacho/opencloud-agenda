@@ -35,6 +35,29 @@ export function escapeIcs(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
 }
 
+// Colours come from server data (calendar-color, ICS COLOR, subscriptions.json)
+// and end up in style bindings. Only hex values and plain colour names pass —
+// anything else (url(...), var(...), expressions) falls back to the default.
+export function safeColor(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const v = value.trim()
+  return /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) || /^[a-z]{3,30}$/i.test(v) ? v : undefined
+}
+
+// Re-serialise an RRULE through ical.js so only well-formed rule parts are
+// written back; a rule that does not parse (or still carries a line break) is dropped.
+export function safeRrule(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    const recur = ICAL.Recur.fromString(value)
+    if (!recur.freq) return undefined // ical.js turns unparsable input into FREQ=null
+    const rule = recur.toString()
+    return /[\r\n]/.test(rule) ? undefined : rule
+  } catch {
+    return undefined
+  }
+}
+
 function parseXml(xml: string): Document {
   return new DOMParser().parseFromString(xml, 'application/xml')
 }
@@ -68,7 +91,9 @@ export function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): s
     'VERSION:2.0',
     `PRODID:${PRODID}`,
     'BEGIN:VEVENT',
-    `UID:${event.seriesUid ?? event.uid}`,
+    // UID is a TEXT value (RFC 5545 §3.8.4.7). Escaping keeps a UID read from
+    // foreign ICS data — which may contain a line break — from adding properties.
+    `UID:${escapeIcs(event.seriesUid ?? event.uid)}`,
     `DTSTAMP:${fmtUtc(new Date())}`,
     event.allDay ? `DTSTART;VALUE=DATE:${fmtDate(event.start)}` : `DTSTART:${fmtUtc(event.start)}`,
     event.allDay ? `DTEND;VALUE=DATE:${fmtDate(event.end)}` : `DTEND:${fmtUtc(event.end)}`,
@@ -76,8 +101,10 @@ export function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): s
   ]
   if (event.description) lines.push(`DESCRIPTION:${escapeIcs(event.description)}`)
   if (event.location) lines.push(`LOCATION:${escapeIcs(event.location)}`)
-  if (event.color) lines.push(`COLOR:${event.color}`)
-  if (event.rrule) lines.push(`RRULE:${event.rrule}`)
+  const color = safeColor(event.color)
+  if (color) lines.push(`COLOR:${color}`)
+  const rrule = safeRrule(event.rrule)
+  if (rrule) lines.push(`RRULE:${rrule}`)
   lines.push('END:VEVENT', 'END:VCALENDAR')
   return lines.join('\r\n') + '\r\n'
 }
@@ -85,7 +112,28 @@ export function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): s
 // Expansion window for recurring events (years back and forward from now)
 const EXPAND_YEARS = 2
 
-export function parseEvents(icsText: string, calendarHref: string, etag?: string): CalendarEvent[] {
+// Limits for recurrence expansion. One ical.js iterator step costs roughly
+// 5–10 µs, so the per-event cap alone still let a feed with many
+// FREQ=MINUTELY events from 1900 freeze the tab for minutes. The budget is
+// shared across everything parsed for one feed or one calendar fetch.
+const MAX_STEPS_PER_EVENT = 50_000
+const MAX_OCCURRENCES_PER_EVENT = 500
+
+export interface ExpansionBudget {
+  steps: number   // recurrence iterator steps left
+  results: number // events/occurrences left to return
+}
+
+export function newExpansionBudget(): ExpansionBudget {
+  return { steps: 100_000, results: 20_000 }
+}
+
+export function parseEvents(
+  icsText: string,
+  calendarHref: string,
+  etag?: string,
+  budget: ExpansionBudget = newExpansionBudget(),
+): CalendarEvent[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let jcal: any
   try {
@@ -99,9 +147,10 @@ export function parseEvents(icsText: string, calendarHref: string, etag?: string
   const results: CalendarEvent[] = []
 
   for (const vevent of vevents) {
+    if (budget.results <= 0) break
     try {
       const ev = new ICAL.Event(vevent)
-      const color = vevent.getFirstPropertyValue('color') as string | undefined
+      const color = safeColor(vevent.getFirstPropertyValue('color'))
 
       if (ev.isRecurring()) {
         const now = Date.now()
@@ -118,11 +167,13 @@ export function parseEvents(icsText: string, calendarHref: string, etag?: string
         let next: ICAL.Time | null
         let inRange = 0
         let total = 0
-        while ((next = iterator.next()) && total < 50000) {
+        while (total < MAX_STEPS_PER_EVENT && budget.steps > 0 && (next = iterator.next())) {
           total++
+          budget.steps--
           if (next.compare(rangeEnd) > 0) break
           if (next.compare(rangeStart) < 0) continue
-          if (inRange++ >= 500) break
+          if (inRange++ >= MAX_OCCURRENCES_PER_EVENT || budget.results <= 0) break
+          budget.results--
           const occurrence = ev.getOccurrenceDetails(next)
           const allDay = occurrence.startDate.isDate
           results.push({
@@ -144,6 +195,7 @@ export function parseEvents(icsText: string, calendarHref: string, etag?: string
         const dtstart = ev.startDate
         const dtend = ev.endDate
         const allDay = dtstart.isDate
+        budget.results--
         results.push({
           uid: ev.uid,
           title: ev.summary || '(no title)',
@@ -174,12 +226,34 @@ export function newEventHref(calendarHref: string, name: string): string {
   return `${calendarHref.replace(/\/$/, '')}/${encodeURIComponent(name)}.ics`
 }
 
+// Resolve an href from a multistatus response against `base` and accept it
+// only if it lies inside `scope` (same origin, path below the scope path).
+// A server or intermediary must not be able to point later requests — which
+// carry the Basic app token — at another host or an unrelated path.
+export function resolveHref(href: string, base: string, scope: string): string | null {
+  let url: URL
+  try {
+    url = new URL(href, base)
+  } catch {
+    return null
+  }
+  const scopeUrl = new URL(scope)
+  if (url.origin !== scopeUrl.origin) return null
+  if (!url.pathname.startsWith(scopeUrl.pathname)) return null
+  // the URL parser has already collapsed dot segments; reject encoded ones it leaves alone
+  if (/%2e%2e|%2f/i.test(url.pathname)) return null
+  url.hash = ''
+  return url.href
+}
+
 export class CalDavClient {
   private baseUrl: string
+  private origin: string
   private authHeader: string
 
   constructor(serverUrl: string, pathId: string, authUsername: string, appToken: string) {
     this.baseUrl = `${serverUrl.replace(/\/$/, '')}/caldav/${encodeURIComponent(pathId)}/`
+    this.origin = new URL(this.baseUrl).origin
     this.authHeader = `Basic ${btoa(`${authUsername}:${appToken}`)}`
   }
 
@@ -194,6 +268,11 @@ export class CalDavClient {
       ...extraHeaders,
     }
     if (body && !headers['Content-Type']) headers['Content-Type'] = 'text/calendar; charset=utf-8'
+
+    // Last line of defence: the app token never leaves the OpenCloud origin.
+    if (new URL(url, this.baseUrl).origin !== this.origin) {
+      throw new Error(`CalDAV ${method} refused: ${url} is outside ${this.origin}`)
+    }
 
     const res = await fetch(url, { method, headers, body })
     if (!res.ok && res.status !== 207) {
@@ -226,18 +305,18 @@ export class CalDavClient {
     // parse <response> blocks
     const responseBlocks = xml.match(/<[^>]*:?response[^>]*>[\s\S]*?<\/[^>]*:?response>/gi) || []
     for (const block of responseBlocks) {
-      const href = xmlText(block, 'href')
-      if (!href || href === new URL(this.baseUrl).pathname) continue
+      const rawHref = xmlText(block, 'href')
+      const href = rawHref && resolveHref(rawHref, this.baseUrl, this.baseUrl)
+      if (!href || href === this.baseUrl) continue
 
       // only include proper CalDAV calendar collections (resourcetype contains "calendar")
       if (!block.match(/<[^>]*:?calendar\s*\/>/i)) continue
 
-      const displayName = xmlText(block, 'displayname') || href.split('/').filter(Boolean).pop() || 'Calendar'
-      const color = xmlText(block, 'calendar-color') || undefined
+      const displayName = xmlText(block, 'displayname') || new URL(href).pathname.split('/').filter(Boolean).pop() || 'Calendar'
+      const color = safeColor(xmlText(block, 'calendar-color'))
       const ctag = xmlText(block, 'getctag') || undefined
 
-      const fullHref = href.startsWith('http') ? href : `${new URL(this.baseUrl).origin}${href}`
-      calendars.push({ href: fullHref, displayName, color, ctag })
+      calendars.push({ href, displayName, color, ctag })
     }
 
     return calendars
@@ -267,17 +346,19 @@ export class CalDavClient {
     const doc = parseXml(xml)
     const responses = Array.from(doc.getElementsByTagNameNS('DAV:', 'response'))
     const events: CalendarEvent[] = []
+    const budget = newExpansionBudget()
+    const scope = calendarHref.endsWith('/') ? calendarHref : `${calendarHref}/`
 
     for (const response of responses) {
-      const href = getTagText(response, 'href')
+      const rawHref = getTagText(response, 'href')
+      const href = rawHref && resolveHref(rawHref, calendarHref, scope)
       if (!href || !href.endsWith('.ics')) continue
 
       const etag = getTagText(response, 'getetag').replace(/"/g, '')
       const icsData = getTagText(response, 'calendar-data')
       if (!icsData) continue
 
-      const fullHref = href.startsWith('http') ? href : `${new URL(calendarHref).origin}${href}`
-      const parsed = parseEvents(icsData, fullHref, etag)
+      const parsed = parseEvents(icsData, href, etag, budget)
       events.push(...parsed)
     }
 

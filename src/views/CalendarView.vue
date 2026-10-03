@@ -27,7 +27,7 @@
           />
           <span
             class="cal-dot"
-            :style="{ background: cal.color ?? '#0082c9' }"
+            :style="{ backgroundColor: cal.color ?? '#0082c9' }"
           />
           <input
             v-if="renamingHref === cal.href"
@@ -62,7 +62,7 @@
             :checked="sub.enabled"
             @click.stop="toggleSubscription(sub.id)"
           />
-          <span class="cal-dot" :style="{ background: sub.color }" />
+          <span class="cal-dot" :style="{ backgroundColor: sub.color }" />
           <span
             class="cal-name sub-name"
             :title="t('Show URL and QR code')"

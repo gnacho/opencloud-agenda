@@ -7,7 +7,8 @@ async function flush() {
 }
 import { useSubscriptions, mergeSubscriptions } from './useSubscriptions'
 
-vi.mock('@/services/caldav', () => ({
+vi.mock('@/services/caldav', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/services/caldav')>(),
   parseEvents: () => [],
 }))
 

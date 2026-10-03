@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- **A hostile ICS feed could freeze the tab** — recurrence expansion was capped per event only (50,000 steps), and one ical.js step costs 5–10 µs. A feed with many `FREQ=MINUTELY` events starting in 1900 ran for minutes on the main thread, on every load. Everything parsed for one feed or one calendar fetch now shares a budget of 100,000 steps and 20,000 returned events
+- **The app token could follow an href to another host** — absolute hrefs in PROPFIND and REPORT responses were used as-is, so a manipulated response could send later requests, with the Basic app token, anywhere. Hrefs are now resolved against the request URL and dropped unless they stay on the same origin and below the expected collection; on top of that, `request()` refuses any URL outside the OpenCloud origin
+- **ICS injection on save** — `UID`, `COLOR` and `RRULE` were written back raw. A UID from foreign ICS data can contain a real line break, which added properties or whole components when the event was saved. UID is now escaped as the TEXT value it is, COLOR must be a plain colour, and RRULE is re-serialised through ical.js (unparsable or multi-line rules are dropped)
+- **Colours from server data reached CSS unchecked** — `calendar-color`, the ICS `COLOR` and the colours in `subscriptions.json` went into `background:`, where `url(…)` makes the browser fetch a third-party URL on every render. All three now pass only hex values and plain colour names, the sidebar binds `background-color`, and `subscriptions.json` entries are shape-checked when loaded
+
 ## [2.9.1] - 2026-10-03
 
 ### Security

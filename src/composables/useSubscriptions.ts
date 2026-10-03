@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
-import { parseEvents, type CalendarEvent } from '@/services/caldav'
+import { parseEvents, safeColor, type CalendarEvent } from '@/services/caldav'
 import { SUBSCRIPTIONS_STORAGE_PREFIX, SUBSCRIPTIONS_WEBDAV_DIR } from '@/constants'
 
 export interface IcsSubscription {
@@ -15,12 +15,27 @@ const STORAGE_KEY_PREFIX = SUBSCRIPTIONS_STORAGE_PREFIX
 const WEBDAV_DIR = SUBSCRIPTIONS_WEBDAV_DIR
 const WEBDAV_FILE = 'subscriptions.json'
 
+const DEFAULT_COLOR = '#e67e22'
+
+// subscriptions.json lives in the user's WebDAV space and can be edited by
+// any client, so its entries are checked before use. The colour in particular
+// ends up in a style binding and must not carry url(...) or similar.
+export function sanitizeSubscriptions(raw: unknown): IcsSubscription[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((s) => {
+    if (!s || typeof s !== 'object') return []
+    const { id, url, name, color, enabled } = s as Record<string, unknown>
+    if (typeof id !== 'string' || typeof url !== 'string' || typeof name !== 'string') return []
+    return [{ id, url, name, color: safeColor(color) ?? DEFAULT_COLOR, enabled: enabled !== false }]
+  })
+}
+
 // ── localStorage (cache / offline fallback) ───────────────────────────────────
 
 function loadFromStorage(userId: string): IcsSubscription[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PREFIX + userId)
-    return raw ? JSON.parse(raw) : []
+    return raw ? sanitizeSubscriptions(JSON.parse(raw)) : []
   } catch {
     return []
   }
@@ -93,7 +108,7 @@ async function loadFromServer(userId: string, accessToken: string): Promise<Serv
     // The ETag is what makes the conditional write below possible. A server that
     // does not send one simply gets unconditional writes, exactly as before.
     const etag = res.headers?.get?.('etag') ?? null
-    return { subs: await res.json() as IcsSubscription[], etag }
+    return { subs: sanitizeSubscriptions(await res.json()), etag }
   } catch {
     return null
   }
