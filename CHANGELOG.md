@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.9.2] - 2026-10-03
 
 ### Security
 - **A hostile ICS feed could freeze the tab** — recurrence expansion was capped per event only (50,000 steps), and one ical.js step costs 5–10 µs. A feed with many `FREQ=MINUTELY` events starting in 1900 ran for minutes on the main thread, on every load. Everything parsed for one feed or one calendar fetch now shares a budget of 100,000 steps and 20,000 returned events
