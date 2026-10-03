@@ -10,6 +10,12 @@ All notable changes to this project will be documented in this file.
 - Switching users cleared the *new* user's cached token instead of the previous one's; with revocation that would have killed a valid token, so the previous user's ID is now passed explicitly
 - **CI script injection** — the release workflow pasted `github.ref_name` straight into its shell script, and the dev deploy did the same with `github.ref`. Git allows `$( ) ; |` in ref names, so anyone able to push a tag or branch could run commands holding `RELEASE_TOKEN`. Both values now come in through `env:` and are quoted; release tags outside `[A-Za-z0-9._+-]` are rejected. The deploy SSH key is no longer interpolated into the script either
 
+### Changed
+- **Toolchain aligned with OpenCloud Web and the official web extensions** — versions follow `opencloud-eu/web` and `opencloud-eu/web-extensions` rather than the newest release: vitest 3 → 5, TypeScript 5.9 → 6.0.3, vue-tsc 2 → 3.3.11, vue3-gettext 4.0.0-beta.1 → 4.0.1, happy-dom 20.14.5, @vitejs/plugin-vue 6.0.9, vite ^8.0.16 (the floor of the security release web-extensions pulls in), uuid 11 → 14 (`@types/uuid` dropped, uuid ships its own types)
+- **pnpm 11** (11.28.3, as in OpenCloud Web). Its settings move from the `pnpm` field in `package.json` to `pnpm-workspace.yaml`, with `allowBuilds` replacing `onlyBuiltDependencies`. Like upstream, `minimumReleaseAge: 720` only installs releases that have been public for 12 h, and the `axios`, `adm-zip` and `ws` overrides match OpenCloud Web. CI now takes the pnpm version from `packageManager` instead of a hard-coded `pnpm@10`
+- Requires Node.js 22+ (`engines`), as upstream does
+- Transitive build dependencies (postcss, nanoid, brace-expansion) and the type-only copies of host-provided packages (dompurify, qs, fast-xml-*) were refreshed within their declared ranges, and vue to 3.5.43. `pnpm audit` goes from 134 findings (1 critical) to none
+
 ## [2.9.0] - 2026-09-16
 
 ### Changed

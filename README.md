@@ -63,7 +63,7 @@ The app registers itself automatically via the included `manifest.json` — no c
 
 ### Option B: Build from source
 
-Requirements: Node.js 18+ and [pnpm](https://pnpm.io/)
+Requirements: Node.js 22+ and [pnpm](https://pnpm.io/) 11 (the exact version is pinned via `packageManager` in `package.json`; with Corepack enabled it is picked up automatically)
 
 ```bash
 git clone https://forgejo.linux-nerds.org/frank/opencloud-agenda.git

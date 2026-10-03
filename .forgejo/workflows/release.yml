@@ -24,7 +24,7 @@ jobs:
           git checkout ${{ github.sha }}
 
       - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10 --activate
+        run: corepack enable && corepack install  # version from packageManager in package.json
 
       - name: Install packages
         run: pnpm install --frozen-lockfile
