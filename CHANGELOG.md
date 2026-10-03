@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- **Deploys no longer log in as root** — the dev-deploy workflow and `deploy.sh` now use a `deploy` user whose keys are bound to a forced command (`deploy/server/agenda-deploy`): uploads are confined to the app directory by `rrsync -wo`, and `restart` runs one fixed script as `dockeruser` through a single sudoers rule. A leaked deploy key can no longer open a shell on the server. Setup steps are in `deploy/server/SETUP.md`
+- The dev-deploy workflow pins the server's ED25519 host key instead of trusting whatever `ssh-keyscan` returned on each run; `deploy.sh` checks it strictly too
+- All workflows remove the Forgejo token from `.git/config` right after cloning, so dependency code running during install and build cannot read it
+
 ## [2.9.2] - 2026-10-03
 
 ### Security

@@ -21,6 +21,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git clone "https://x-access-token:${GITHUB_TOKEN}@${GITHUB_SERVER_URL#https://}/${{ github.repository }}.git" .
+          # Keep the token out of .git/config while dependency code runs in later steps
+          git remote set-url origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git checkout ${{ github.sha }}
 
       - name: Install pnpm

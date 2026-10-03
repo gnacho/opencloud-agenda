@@ -22,6 +22,8 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           git clone "https://x-access-token:${GITHUB_TOKEN}@${GITHUB_SERVER_URL#https://}/${{ github.repository }}.git" .
+          # Keep the token out of .git/config while dependency code runs in later steps
+          git remote set-url origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
           git checkout "$REF"
 
       - name: Install pnpm
@@ -36,26 +38,30 @@ jobs:
       - name: Setup SSH key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Pinned host key (ED25519, SHA256:nOxgz1IQ0klpetz4Xo0k63rmWac23ZeSwdLm5FrK7NI).
+          # ssh-keyscan on every run would trust whatever answers; if the server's
+          # host key ever changes, verify the new one and update this line.
+          KNOWN_HOST: cloud.linux-nerds.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPRPf55guMUOVOBQKrphYOe3jpeOm2AJ9g+UF09J2zdT
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H cloud.linux-nerds.org >> ~/.ssh/known_hosts
+          printf '%s\n' "$KNOWN_HOST" > ~/.ssh/known_hosts
 
+      # The deploy user's key is bound to a forced command on the server
+      # (deploy/server/agenda-deploy): uploads are confined to the app
+      # directory, and "restart" is the only other thing it accepts.
       - name: Upload dist/
         run: |
           rsync -av --delete \
-            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
+            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
             dist/ \
-            root@cloud.linux-nerds.org:/mnt/HC_Volume_103940066/opencloud_keycloak_data/data/web/assets/apps/opencloud-agenda/
+            deploy@cloud.linux-nerds.org:./
 
       - name: Restart containers
         run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes root@cloud.linux-nerds.org \
-            "cd /home/dockeruser/opencloud-compose-keycloak && \
-             sudo -u dockeruser docker compose restart opencloud && \
-             sleep 3 && \
-             sudo -u dockeruser docker compose restart traefik"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            deploy@cloud.linux-nerds.org restart
 
       - name: Done
         run: echo "Deploy fertig. https://cloud.linux-nerds.org/apps/opencloud-agenda/"

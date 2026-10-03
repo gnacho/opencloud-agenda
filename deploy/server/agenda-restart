@@ -1,0 +1,10 @@
+#!/bin/sh
+# Restarts OpenCloud so it picks up the new app files — see deploy/server/SETUP.md.
+# Install as /usr/local/sbin/agenda-restart (owner root, mode 755). Runs as
+# dockeruser via the sudoers rule in agenda-deploy.sudoers.
+set -eu
+
+cd /home/dockeruser/opencloud-compose-keycloak
+docker compose restart opencloud
+sleep 3
+docker compose restart traefik
