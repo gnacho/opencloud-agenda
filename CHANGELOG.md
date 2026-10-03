@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.9.1] - 2026-10-03
 
 ### Security
 - **Moving an event could write outside the target calendar** — the new resource path was built from the event's UID, which comes from stored ICS data and may have been written by another client or an imported file. A UID containing `../`, `?` or `#` turned the move into a PUT (and the following DELETE of the original) against an arbitrary path on the OpenCloud origin, sent with the app token. A moved event now gets a fresh UUID as its file name, and `newEventHref` percent-encodes the name so it always stays one segment of the collection
