@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- **Moving an event could write outside the target calendar** — the new resource path was built from the event's UID, which comes from stored ICS data and may have been written by another client or an imported file. A UID containing `../`, `?` or `#` turned the move into a PUT (and the following DELETE of the original) against an arbitrary path on the OpenCloud origin, sent with the app token. A moved event now gets a fresh UUID as its file name, and `newEventHref` percent-encodes the name so it always stays one segment of the collection
+- **The app token outlived the login session** — it was kept in `localStorage` for 24 h and never revoked, so it survived logout and was readable by any script on the OpenCloud origin for that whole time. It now lives in `sessionStorage`, is revoked on the server when OpenCloud Web clears the session on logout (the watcher is registered at app start, so a logout from any other app counts too) and when the user changes. Tokens left in `localStorage` by earlier versions are removed on first load
+- Switching users cleared the *new* user's cached token instead of the previous one's; with revocation that would have killed a valid token, so the previous user's ID is now passed explicitly
+- **CI script injection** — the release workflow pasted `github.ref_name` straight into its shell script, and the dev deploy did the same with `github.ref`. Git allows `$( ) ; |` in ref names, so anyone able to push a tag or branch could run commands holding `RELEASE_TOKEN`. Both values now come in through `env:` and are quoted; release tags outside `[A-Za-z0-9._+-]` are rejected. The deploy SSH key is no longer interpolated into the script either
+
 ## [2.9.0] - 2026-09-16
 
 ### Changed

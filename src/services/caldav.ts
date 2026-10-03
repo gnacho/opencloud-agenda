@@ -168,6 +168,12 @@ export function parseEvents(icsText: string, calendarHref: string, etag?: string
 
 // ---------- CalDAV client ----------
 
+// URL of a new event resource inside a calendar collection. The name is
+// percent-encoded so it always stays a single path segment of the collection.
+export function newEventHref(calendarHref: string, name: string): string {
+  return `${calendarHref.replace(/\/$/, '')}/${encodeURIComponent(name)}.ics`
+}
+
 export class CalDavClient {
   private baseUrl: string
   private authHeader: string
@@ -386,7 +392,7 @@ export class CalDavClient {
 
   // Build URL for a new event in a given calendar
   newEventHref(calendarHref: string, uid: string): string {
-    return `${calendarHref.replace(/\/$/, '')}/${uid}.ics`
+    return newEventHref(calendarHref, uid)
   }
 
   // DELETE: remove an event (or entire recurring series)

@@ -3,6 +3,7 @@ import { defineWebApplication } from '@opencloud-eu/web-pkg'
 import type { AppMenuItemExtension, Extension } from '@opencloud-eu/web-pkg'
 import { urlJoin } from '@opencloud-eu/web-client'
 import { APP_ID } from '@/constants'
+import { registerTokenRevocationOnLogout } from '@/composables/useAuth'
 
 function getAppName(): string {
   const lang = document.documentElement.lang || navigator.language || ''
@@ -11,6 +12,8 @@ function getAppName(): string {
 
 export default defineWebApplication({
   setup() {
+    registerTokenRevocationOnLogout()
+
     const appInfo = {
       id: APP_ID,
       name: getAppName(),

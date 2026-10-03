@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { escapeXml, escapeIcs, buildIcs, parseEvents } from './caldav'
+import { escapeXml, escapeIcs, buildIcs, parseEvents, newEventHref } from './caldav'
 
 describe('escapeXml', () => {
   it('escapes ampersand', () => expect(escapeXml('a & b')).toBe('a &amp; b'))
@@ -10,6 +10,28 @@ describe('escapeXml', () => {
   it('passes through plain text unchanged', () => expect(escapeXml('hello world')).toBe('hello world'))
   it('handles all special chars at once', () =>
     expect(escapeXml('<a href="x&y">it\'s</a>')).toBe('&lt;a href=&quot;x&amp;y&quot;&gt;it&apos;s&lt;/a&gt;'))
+})
+
+describe('newEventHref', () => {
+  const cal = 'https://cloud.example/remote.php/dav/calendars/u1/personal/'
+
+  it('appends the name as a single .ics segment', () =>
+    expect(newEventHref(cal, 'abc')).toBe(`${cal}abc.ics`))
+  it('works without a trailing slash on the collection', () =>
+    expect(newEventHref(cal.replace(/\/$/, ''), 'abc')).toBe(`${cal}abc.ics`))
+
+  // Regression: the UID of a moved event comes from untrusted ICS data. Used
+  // raw, '../' or '?' in it redirected the PUT outside the target calendar.
+  it.each(['../../../files/u1/x', 'a/b', 'x?y=1', 'x#frag', '..'])(
+    'keeps %s inside the collection',
+    (name) => {
+      const url = new URL(newEventHref(cal, name))
+      expect(url.href.startsWith(cal)).toBe(true)
+      expect(url.search).toBe('')
+      expect(url.hash).toBe('')
+      expect(url.pathname.slice(new URL(cal).pathname.length)).not.toContain('/')
+    },
+  )
 })
 
 describe('escapeIcs', () => {

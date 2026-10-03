@@ -116,6 +116,8 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
+import { v4 as uuidv4 } from 'uuid'
+import { newEventHref } from '@/services/caldav'
 import type { Calendar, CalendarEvent } from '@/services/caldav'
 import { useI18n } from '@/composables/useI18n'
 import { DAY_NAMES, getNthWeekday, parseRrule, buildRrule as buildRruleUtil } from '@/utils/rrule'
@@ -272,7 +274,8 @@ function handleSave() {
     })
   } else {
     // Compute the target calendarHref: if the user picked a different calendar,
-    // build a new .ics URL in that collection (same UID, new collection path).
+    // build a new .ics URL in that collection. The file name is a fresh UUID —
+    // the UID comes from the stored ICS and must not end up in the path.
     const currentCal = props.calendars.find(c => props.event!.calendarHref.startsWith(c.href))
     const calendarChanged = form.calendarHref !== currentCal?.href
 
@@ -281,9 +284,8 @@ function handleSave() {
       return
     }
 
-    const eventUid = props.event!.seriesUid ?? props.event!.uid
     const newCalendarHref = calendarChanged
-      ? `${form.calendarHref.replace(/\/$/, '')}/${eventUid}.ics`
+      ? newEventHref(form.calendarHref, uuidv4())
       : props.event!.calendarHref
 
     emit('update', {

@@ -20,7 +20,7 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 8.x, bui
 - **Manual refresh** — ↻ button in the sidebar reloads all data and subscriptions from the server on demand
 - **Bilingual UI** — English and German, based on the browser/OpenCloud language setting
 - **Dark mode support** — follows the OpenCloud theme
-- **Secure token management** — app tokens are cached in `localStorage` (24 h TTL), deduplicated across tabs, and refreshed automatically on expiry
+- **Secure token management** — app tokens are cached per tab in `sessionStorage` (24 h TTL), refreshed automatically on expiry, and revoked on the server at logout
 
 ![Agenda App](docs/screenshot.png)
 
@@ -102,7 +102,7 @@ Refer to the [OpenCloud web-app-skeleton](https://github.com/opencloud-eu/web-ap
 ## Architecture notes
 
 - Authentication uses the OpenCloud app token endpoint (`POST /auth-app/tokens`) with the OIDC Bearer token, then Basic Auth for CalDAV requests — identical to the contacts app pattern.
-- App tokens are stored in `localStorage` keyed by user UUID (24 h TTL). Concurrent tab requests are deduplicated via a module-level in-flight promise map. A 401 response triggers an automatic token refresh.
+- App tokens are stored in `sessionStorage` keyed by user UUID (24 h TTL), so they never outlive the browser tab. Concurrent requests within a tab are deduplicated via a module-level in-flight promise map. A 401 response triggers an automatic token refresh. When OpenCloud Web clears the login session (logout), the app revokes its token via `DELETE /auth-app/tokens`; the same happens when the user changes.
 - The Radicale CalDAV path uses the **user UUID** (not the username), as set by the OpenCloud proxy via `X-Remote-User`.
 - FullCalendar icon fonts are replaced with Unicode characters to comply with the OpenCloud Content Security Policy (`font-src 'self'` — no `data:` URIs allowed).
 - Recurring events are expanded client-side by ical.js (±2 years). Editing a recurring event uses GET → patch → PUT to preserve the RRULE and all other ICS properties.

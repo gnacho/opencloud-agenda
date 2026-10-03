@@ -22,6 +22,7 @@ export function useCalendar() {
 
   let client: CalDavClient | null = null
   let lastLoadedUserId = ''
+  let lastLoadedPathId = ''
 
   // current view range (set by CalendarView whenever the FC view changes)
   const viewStart = ref<Date>(new Date())
@@ -32,11 +33,12 @@ export function useCalendar() {
 
     // Only clear token if the user actually changed (not on initial load)
     if (lastLoadedUserId && lastLoadedUserId !== userId.value) {
-      clearAppToken()
+      clearAppToken(lastLoadedPathId)
     }
     const token = await getAppToken()
     client = new CalDavClient(serverUrl.value, userPathId.value, userId.value, token)
     lastLoadedUserId = userId.value
+    lastLoadedPathId = userPathId.value
     return client
   }
 

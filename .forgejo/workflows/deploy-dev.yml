@@ -17,9 +17,12 @@ jobs:
       - name: Checkout
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed via env, never interpolated into the script: branch names
+          # may contain shell metacharacters such as $( ) ; |
+          REF: ${{ github.ref }}
         run: |
           git clone "https://x-access-token:${GITHUB_TOKEN}@${GITHUB_SERVER_URL#https://}/${{ github.repository }}.git" .
-          git checkout ${{ github.ref }}
+          git checkout "$REF"
 
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10 --activate
@@ -31,9 +34,11 @@ jobs:
         run: pnpm build
 
       - name: Setup SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H cloud.linux-nerds.org >> ~/.ssh/known_hosts
 
