@@ -46,13 +46,10 @@ function saveToStorage(userId: string, subs: IcsSubscription[]) {
 }
 
 // Feed URLs are often capability URLs — Google's and Outlook's private feeds
-// carry their secret in the path — and localStorage outlives the login. On
-// logout the cache goes, unless it holds changes the server never confirmed:
-// those are kept so the next login can merge them (see mergeSubscriptions),
-// because a lost feed URL is gone for good while a lingering one can still be
-// removed by hand.
+// carry their secret in the path — and localStorage outlives the login, so
+// the cache must not. See flushAndForget() for the unsynced case.
 function forgetCache(userId: string) {
-  if (!userId || hasUnsynced(userId)) return
+  if (!userId) return
   try { localStorage.removeItem(STORAGE_KEY_PREFIX + userId) } catch { /* ignore */ }
 }
 
@@ -140,6 +137,8 @@ async function saveToServer(
   accessToken: string,
   subs: IcsSubscription[],
   etag: string | null,
+  // keepalive lets the request finish while the page navigates away (logout)
+  { keepalive = false }: { keepalive?: boolean } = {},
 ): Promise<WriteResult> {
   const url = webdavUrl(userId)
   const headers: Record<string, string> = {
@@ -149,14 +148,15 @@ async function saveToServer(
   if (etag) headers['If-Match'] = etag
 
   try {
-    let res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(subs) })
+    let res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(subs), keepalive })
     if (res.status === 409) {
       // Parent directory missing — create it first.
       await fetch(webdavDirUrl(userId), {
         method: 'MKCOL',
         headers: { Authorization: `Bearer ${accessToken}` },
+        keepalive,
       })
-      res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(subs) })
+      res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(subs), keepalive })
     }
     if (res.status === 412) return { ok: false, etag: null, conflict: true }
     return {
@@ -426,6 +426,30 @@ export function useSubscriptions(
     await Promise.all(enabled.map(fetchOne))
   }
 
+  // Logout. Changes the server never confirmed get one last write with the
+  // bearer that is still valid at this moment — OpenCloud Web clears it from
+  // the store before the identity provider's logout endpoint sees it, which is
+  // also what useAuth relies on to revoke the app token. keepalive lets the
+  // request outlive the page. Then the cache goes, confirmed or not.
+  //
+  // Earlier versions kept an unsynced cache across logout so the next login
+  // could merge it. That protected against "the write failed before and fails
+  // again now" — which costs re-adding a feed — at the price of leaving feed
+  // URLs, secrets included, in the browser profile of a shared machine. Only
+  // without any bearer at all is the cache still kept; there is nothing else
+  // that could carry the change.
+  function flushAndForget(uid: string, bearer: string) {
+    if (!uid) return
+    if (writeTimer !== null) { clearTimeout(writeTimer); writeTimer = null }
+    if (hasUnsynced(uid)) {
+      if (!bearer) return
+      const list = subscriptions.value.length ? subscriptions.value : loadFromStorage(uid)
+      void saveToServer(uid, bearer, list, serverEtag, { keepalive: true })
+      clearUnsynced(uid)
+    }
+    forgetCache(uid)
+  }
+
   // Reload when userId changes OR when accessToken first becomes available.
   // If userId arrives before accessToken, the initial load() falls back to
   // localStorage; this watcher retries from the server once the token is ready.
@@ -438,14 +462,12 @@ export function useSubscriptions(
       subscriptions.value = []
       subscriptionEvents.value = []
       subscriptionErrors.value = {}
-      if (oldUid) forgetCache(oldUid)
+      if (oldUid) flushAndForget(oldUid, oldToken || '')
       return
     }
-    // OpenCloud Web clears the access token on logout; the user store may
-    // still hold the user while the page navigates to the identity provider.
-    // useAuth treats this moment as logout (it revokes the app token), and so
-    // does the cache. The in-memory list stays — load() refetches on return.
-    if (!token && oldToken) forgetCache(uid)
+    // Token gone while the user store still holds the user: the usual order
+    // on logout. The in-memory list stays — load() refetches on return.
+    if (!token && oldToken) flushAndForget(uid, oldToken)
     if (uid !== oldUid || (token && !oldToken)) {
       session++  // invalidate requests from the previous user/session
       if (uid !== oldUid) {

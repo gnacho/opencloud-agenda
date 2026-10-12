@@ -2,7 +2,7 @@
 // upstream "feed" is a local server; the proxy under test is pointed at it
 // through an injected lookup so the real address guard can still be exercised
 // against hostnames (which is where the rebinding fix lives).
-import { test, describe, before, after } from 'node:test'
+import { test, describe, before, after, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import { createProxyServer, isPrivateAddress, makeGuardedLookup } from './server.js'
@@ -265,6 +265,19 @@ describe('proxy end to end', () => {
       const body = await r.text()
       assert.equal(body, 'Upstream error: feed not reachable')
       assert.doesNotMatch(body, /127\.0\.0\.1|ECONNREFUSED/)
+    })
+    test('the log line names the host, never the path of the feed', async () => {
+      // Google/Outlook private feeds carry their secret in the path
+      const log = mock.method(console, 'error', () => {})
+      try {
+        await via(lenientPort, 'http://127.0.0.1:1/calendar/ical/x/private-SECRETTOKEN/basic.ics')
+        const lines = log.mock.calls.map(c => c.arguments.join(' '))
+        assert.equal(lines.length, 1)
+        assert.match(lines[0], /^upstream 127\.0\.0\.1:1 #[0-9a-f]{8}: .*ECONNREFUSED/)
+        assert.doesNotMatch(lines[0], /SECRETTOKEN|private-|basic\.ics/)
+      } finally {
+        log.mock.restore()
+      }
     })
   })
 })

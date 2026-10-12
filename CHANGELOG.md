@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- **ICS proxy logged the full feed URL on upstream errors** — introduced in 2.10.1 together with the sanitised client messages. Google and Outlook private feeds carry their secret in the path, so the container log would have collected them. The log line now names the feed's host and a short hash, never the URL
+- **Unsynced subscription changes no longer keep the cache alive across logout** — 2.10.1 dropped the `localStorage` cache on logout except when it held changes the server had not confirmed. Those are now written once more with the bearer that is still valid at that moment (`keepalive`, so the request outlives the page), and the cache is dropped either way. Only when no bearer exists at all is the cache kept, since nothing else could carry the change
+- `AUTH_CACHE_MS` in the proxy's environment sets how long a verified token is trusted without asking OpenCloud again (default 60000; `0` re-checks every request)
+
 ## [2.10.1] - 2026-10-12
 
 ### Security

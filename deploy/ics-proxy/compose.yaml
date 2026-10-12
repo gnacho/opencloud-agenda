@@ -9,6 +9,8 @@ services:
     restart: always
     working_dir: /app
     command: node server.js
+    # environment:
+    #   AUTH_CACHE_MS: "0"   # re-check every token with OpenCloud; default 60000 (60 s)
     user: "1000:1000"
     read_only: true
     mem_limit: 256m

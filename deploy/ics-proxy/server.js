@@ -18,7 +18,9 @@ const OC_USER_URL = process.env.OC_USER_URL || 'http://opencloud:9200/ocs/v2.php
 const MAX_BYTES = 10 * 1024 * 1024   // refuse feeds larger than 10 MB
 const MAX_REDIRECTS = 5
 const TIMEOUT_MS = 10000
-const AUTH_CACHE_MS = 60 * 1000      // how long a token verified against OpenCloud stays verified
+// How long a token verified against OpenCloud stays verified. A revoked token
+// is honoured for at most this long; set AUTH_CACHE_MS=0 to ask every time.
+const AUTH_CACHE_MS = process.env.AUTH_CACHE_MS !== undefined ? Number(process.env.AUTH_CACHE_MS) : 60 * 1000
 const AUTH_CACHE_MAX = 1000          // entries, before the cache is simply dropped
 
 // Errors with a message that is safe to show the client. Everything else —
@@ -128,8 +130,10 @@ function makeAuthenticator(ocUserUrl) {
     const until = verified.get(key)
     if (until && until > now) return true
     if (!await askOpenCloud(ocUserUrl, authHeader)) return false
-    if (verified.size >= AUTH_CACHE_MAX) verified.clear()
-    verified.set(key, now + AUTH_CACHE_MS)
+    if (AUTH_CACHE_MS > 0) {
+      if (verified.size >= AUTH_CACHE_MAX) verified.clear()
+      verified.set(key, now + AUTH_CACHE_MS)
+    }
     return true
   }
 }
@@ -201,6 +205,14 @@ function clientMessage(err) {
   return 'feed not reachable'
 }
 
+// Feed URLs often carry their secret in the path — Google's and Outlook's
+// private feeds do — and container logs are not a secret store. The log gets
+// the host plus a short hash of the full URL to tell feeds apart, nothing more.
+function logName(targetUrl) {
+  const hash = createHash('sha256').update(targetUrl).digest('hex').slice(0, 8)
+  return `${new URL(targetUrl).host} #${hash}`
+}
+
 // ── server ────────────────────────────────────────────────────────────────────
 
 export function createProxyServer({ ocUserUrl = OC_USER_URL, lookup, isPrivate = isPrivateAddress } = {}) {
@@ -249,7 +261,7 @@ export function createProxyServer({ ocUserUrl = OC_USER_URL, lookup, isPrivate =
         body = await readCapped(upstream)
       } catch (err) {
         const msg = clientMessage(err)
-        if (msg !== err.message) console.error(`upstream ${targetUrl}: ${err.message}`)
+        if (msg !== err.message) console.error(`upstream ${logName(targetUrl)}: ${err.message}`)
         res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' })
         res.end('Upstream error: ' + msg)
         return

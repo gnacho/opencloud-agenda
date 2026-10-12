@@ -352,7 +352,43 @@ describe('useSubscriptions — logout cleanup', () => {
     expect(subscriptions.value).toEqual(serverSubs)
   })
 
-  it('keeps the cache on logout while it holds unsynced changes', async () => {
+  it('pushes unsynced changes with the still-valid bearer on logout, then drops the cache', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') return { ok: true, headers: { get: () => '"e2"' } } as unknown as Response
+      if (String(url).includes('subscriptions.json')) {
+        return { ok: true, json: async () => [], headers: { get: () => '"e1"' } } as unknown as Response
+      }
+      return { ok: false } as Response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { accessToken, addSubscription } = makeSubs('user-flush', 'tok')
+    await flush()
+    // Debounced write still pending when the token disappears
+    addSubscription('https://example.org/private-secret.ics', 'X', '#f00')
+    expect(localStorageData['agenda_subscriptions_user-flush_unsynced']).toBe('1')
+
+    accessToken.value = ''
+    await flush()
+
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')
+    expect(put).toBeDefined()
+    expect(put![1]).toMatchObject({
+      keepalive: true,
+      headers: expect.objectContaining({ Authorization: 'Bearer tok', 'If-Match': '"e1"' }),
+    })
+    expect(JSON.parse(put![1]!.body as string).map((s: { url: string }) => s.url))
+      .toEqual(['https://example.org/private-secret.ics'])
+    expect(localStorageData['agenda_subscriptions_user-flush']).toBeUndefined()
+    expect(localStorageData['agenda_subscriptions_user-flush_unsynced']).toBeUndefined()
+
+    // The debounced write must not fire on top of the flush
+    vi.advanceTimersByTime(1000)
+    await flush()
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1)
+  })
+
+  it('without any bearer, keeps an unsynced cache — nothing else could carry the change', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false }) as Response))
 
     // No token: the add below stays local and marks the cache unsynced
@@ -363,7 +399,6 @@ describe('useSubscriptions — logout cleanup', () => {
 
     userId.value = ''
     await flush()
-    // The only copy of that URL — kept so the next login can push it
     expect(localStorageData['agenda_subscriptions_user-dirty']).toBeDefined()
   })
 
