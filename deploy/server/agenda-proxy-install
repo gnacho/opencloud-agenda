@@ -1,0 +1,51 @@
+#!/bin/sh
+# Installs a new ICS proxy from a tar stream on stdin — see deploy/server/SETUP.md.
+# Install as /usr/local/sbin/agenda-proxy-install (owner root, mode 755). Runs as
+# dockeruser via the sudoers rule in agenda-deploy.sudoers; the deploy user's
+# forced command (agenda-deploy) pipes the upload straight into it.
+#
+# Only server.js and package.json are taken from the stream. compose.yaml on
+# the server is never touched — it holds the site's domain and network names.
+set -eu
+
+# The Compose project from README.md ("Optional: iCal Subscriptions").
+PROXY_DIR=/home/dockeruser/ics-proxy
+APP_DIR="$PROXY_DIR/app"
+SERVICE=ics-proxy
+
+cd "$PROXY_DIR"
+
+TMP=$(mktemp -d "$PROXY_DIR/incoming.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
+tar -x -C "$TMP" -f - server.js package.json
+# The check below runs as the container's uid, which may differ from ours.
+chmod 755 "$TMP"
+chmod 644 "$TMP/server.js" "$TMP/package.json"
+
+# Syntax check in the same image the proxy runs with. A broken upload must fail
+# here, while the old version is still serving.
+IMAGE=$(docker compose config --images)
+docker run --rm --network none --read-only --cap-drop ALL --user 1000:1000 \
+  -v "$TMP:/incoming:ro" "$IMAGE" node --check /incoming/server.js
+
+# Keep the running version to fall back to.
+cp -p "$APP_DIR/server.js" "$APP_DIR/server.js.prev"
+cp -p "$APP_DIR/package.json" "$APP_DIR/package.json.prev"
+install -m 644 "$TMP/server.js" "$APP_DIR/server.js"
+install -m 644 "$TMP/package.json" "$APP_DIR/package.json"
+
+docker compose restart "$SERVICE"
+sleep 3
+
+# Liveness: the proxy itself must answer, and an unauthenticated request must
+# get its 401 — not a connection error, not a crash loop.
+if docker compose exec -T "$SERVICE" wget -q -S -O /dev/null http://127.0.0.1:3000/ics-proxy/ 2>&1 | grep -q ' 401 '; then
+  rm -f "$APP_DIR/server.js.prev" "$APP_DIR/package.json.prev"
+  echo "agenda-proxy-install: ics-proxy updated and answering"
+else
+  echo "agenda-proxy-install: new proxy did not come up — restoring previous version" >&2
+  mv "$APP_DIR/server.js.prev" "$APP_DIR/server.js"
+  mv "$APP_DIR/package.json.prev" "$APP_DIR/package.json"
+  docker compose restart "$SERVICE"
+  exit 1
+fi

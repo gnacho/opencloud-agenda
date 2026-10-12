@@ -1,7 +1,7 @@
 # Install as /etc/sudoers.d/agenda-deploy (owner root, mode 440) and check
 # with: visudo -cf /etc/sudoers.d/agenda-deploy
 #
-# The deploy user may run this one script as dockeruser, without arguments
+# The deploy user may run these two scripts as dockeruser, without arguments
 # (the trailing "" forbids any). Being in the docker group instead would be
 # root-equivalent.
-deploy ALL=(dockeruser) NOPASSWD: /usr/local/sbin/agenda-restart ""
+deploy ALL=(dockeruser) NOPASSWD: /usr/local/sbin/agenda-restart "", /usr/local/sbin/agenda-proxy-install ""

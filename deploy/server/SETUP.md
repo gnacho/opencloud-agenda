@@ -7,10 +7,15 @@ Deploys (the *Deploy Dev* workflow and `deploy.sh`) log in as `deploy`, not
 - an rsync upload, confined by `rrsync -wo` to the app directory
   (no downloads, no paths outside it)
 - `restart`, which runs [`agenda-restart`](agenda-restart) as `dockeruser`
-  through a single sudoers rule
+  through a sudoers rule
+- `proxy-install`, which pipes a tar stream of the ICS proxy's two files into
+  [`agenda-proxy-install`](agenda-proxy-install), also as `dockeruser`; that
+  script syntax-checks the upload, swaps it in and rolls back if the proxy
+  does not come up
 
-A leaked deploy key can therefore replace the app's files and restart
-OpenCloud — but not open a shell, read data or touch anything else.
+A leaked deploy key can therefore replace the app's files, replace the ICS
+proxy's code and restart containers — but not open a shell, read data or
+touch anything else.
 
 ## Where each step runs
 
@@ -46,33 +51,45 @@ install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 
 ## 3. Install the scripts and the sudoers rule — OpenCloud server
 
-Fetch the three files from this directory straight from Forgejo:
+Fetch the four files from this directory straight from Forgejo:
 
 ```sh
 cd /root
-for f in agenda-deploy agenda-restart agenda-deploy.sudoers; do
+for f in agenda-deploy agenda-restart agenda-proxy-install agenda-deploy.sudoers; do
   curl -fsSLO "https://forgejo.linux-nerds.org/frank/opencloud-agenda/raw/branch/main/deploy/server/$f"
 done
 ```
 
 Compare them with the copies on the **workstation** before installing:
-`sha256sum deploy/server/agenda-deploy deploy/server/agenda-restart deploy/server/agenda-deploy.sudoers`
-there must print the same sums as `sha256sum agenda-deploy agenda-restart agenda-deploy.sudoers`
+`sha256sum deploy/server/agenda-deploy deploy/server/agenda-restart deploy/server/agenda-proxy-install deploy/server/agenda-deploy.sudoers`
+there must print the same sums as `sha256sum agenda-deploy agenda-restart agenda-proxy-install agenda-deploy.sudoers`
 on the server. (Alternatively copy them from the workstation with
-`scp deploy/server/agenda-deploy deploy/server/agenda-restart deploy/server/agenda-deploy.sudoers root@cloud.linux-nerds.org:/root/`.)
+`scp deploy/server/agenda-deploy deploy/server/agenda-restart deploy/server/agenda-proxy-install deploy/server/agenda-deploy.sudoers root@cloud.linux-nerds.org:/root/`.)
 
 Then install:
 
 ```sh
-install -m 755 -o root -g root agenda-deploy  /usr/local/bin/agenda-deploy
-install -m 755 -o root -g root agenda-restart /usr/local/sbin/agenda-restart
+install -m 755 -o root -g root agenda-deploy        /usr/local/bin/agenda-deploy
+install -m 755 -o root -g root agenda-restart       /usr/local/sbin/agenda-restart
+install -m 755 -o root -g root agenda-proxy-install /usr/local/sbin/agenda-proxy-install
 install -m 440 -o root -g root agenda-deploy.sudoers /etc/sudoers.d/agenda-deploy
 visudo -cf /etc/sudoers.d/agenda-deploy
-rm agenda-deploy agenda-restart agenda-deploy.sudoers
+rm agenda-deploy agenda-restart agenda-proxy-install agenda-deploy.sudoers
 ```
 
 The scripts must stay owned by root and not be writable by `deploy`. If
 `visudo -cf` reports an error, delete `/etc/sudoers.d/agenda-deploy` at once.
+
+`agenda-proxy-install` expects the proxy's Compose project at
+`/home/dockeruser/ics-proxy` (the `~/ics-proxy` from the README, as
+`dockeruser`). If yours lives elsewhere, change `PROXY_DIR` at the top of the
+script before installing — and keep the change when you update the script
+later.
+
+> **Already set up before `proxy-install` existed?** Only this step changes:
+> re-run the four `curl` lines, the comparison and the `install` block.
+> Everything else — user, keys, app directory — stays as it is. The next
+> *Deploy Dev* run then updates the proxy as well.
 
 ## 4. Hand the app directory to the deploy user — OpenCloud server
 
@@ -138,8 +155,15 @@ ssh -i ~/.ssh-jail/opencloud/hetzner_opencloud deploy@cloud.linux-nerds.org id
 # → agenda-deploy: command not allowed: id
 
 bash deploy.sh
-# → builds, uploads, restarts
+# → builds, uploads, restarts, updates the proxy
+#   (last line: "agenda-proxy-install: ics-proxy updated and answering")
 ```
+
+If the proxy step fails with `restoring previous version`, the old proxy is
+back in service; `docker compose logs ics-proxy` as `dockeruser` shows why the
+new one did not start. A failure before that line — `docker: command not
+found`, a missing `ics-proxy` directory — means `PROXY_DIR` in
+`agenda-proxy-install` does not match your setup (see step 3).
 
 Without that line, the `ssh` command fails with `Permission denied` — as
 intended, since that key is not allowed to log in as `deploy`.

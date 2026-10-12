@@ -63,5 +63,15 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             deploy@cloud.linux-nerds.org restart
 
+      # The proxy is a separate container. Its two files go over as a tar
+      # stream; deploy/server/agenda-proxy-install syntax-checks them in the
+      # proxy's image, swaps them in, restarts, and rolls back if the new
+      # version does not answer.
+      - name: Update ICS proxy
+        run: |
+          tar -c -C deploy/ics-proxy server.js package.json \
+            | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+                deploy@cloud.linux-nerds.org proxy-install
+
       - name: Done
         run: echo "Deploy fertig. https://cloud.linux-nerds.org/apps/opencloud-agenda/"

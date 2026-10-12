@@ -216,286 +216,28 @@ Two details the app handles for you:
 > [!TIP]
 > If an Android subscription stays empty, read the status in ICSx⁵ first. **"Not synced yet"** means Android never ran the sync — check battery optimisation for ICSx⁵, then Settings → Accounts → "Auto-sync data". An actual error message means the URL is the problem. The two look identical in the calendar app and lead to completely different searches.
 
-### 1. Create the proxy service
+### 1. Put the files on the server
+
+The proxy lives in [`deploy/ics-proxy/`](deploy/ics-proxy/) — `server.js` (the whole proxy, no dependencies), `package.json` and a `compose.yaml` template. Copy them to the user that runs your OpenCloud Compose project (`dockeruser` in the setups this repo was written for):
 
 ```bash
-mkdir -p ~/ics-proxy/app && cd ~/ics-proxy
+# on the server
+mkdir -p ~/ics-proxy/app
+
+# from the workstation, in this repository
+scp deploy/ics-proxy/compose.yaml                           dockeruser@cloud.example.org:ics-proxy/
+scp deploy/ics-proxy/server.js deploy/ics-proxy/package.json dockeruser@cloud.example.org:ics-proxy/app/
 ```
 
-**`~/ics-proxy/app/package.json`**
-```json
-{
-  "name": "ics-proxy",
-  "version": "2.1.0",
-  "type": "module",
-  "main": "server.js"
-}
-```
+### 2. Adjust the Compose project
 
-**`~/ics-proxy/app/server.js`**
-```js
-import http from 'http'
-import https from 'https'
-import dns from 'dns'
-import net from 'net'
-
-const PORT = 3000
-const PATH_PREFIX = '/ics-proxy/'
-const OC_USER_URL = process.env.OC_USER_URL || 'http://opencloud:9200/ocs/v2.php/cloud/user'
-const MAX_BYTES = 10 * 1024 * 1024   // refuse feeds larger than 10 MB
-const MAX_REDIRECTS = 5
-const TIMEOUT_MS = 10000
-
-// ── SSRF guard ────────────────────────────────────────────────────────────────
-
-// net.BlockList parses addresses into binary form before matching, so every
-// spelling of the same address is caught: ::ffff:7f00:1 and ::ffff:127.0.0.1,
-// 0:0:0:0:0:0:0:1 and ::1. A hand-written regex over the string misses those.
-const blocked = new net.BlockList()
-for (const [addr, prefix] of [
-  ['0.0.0.0', 8],        // "this" network
-  ['10.0.0.0', 8],
-  ['100.64.0.0', 10],    // CGNAT
-  ['127.0.0.0', 8],
-  ['169.254.0.0', 16],   // link-local + cloud metadata
-  ['172.16.0.0', 12],
-  ['192.0.0.0', 24],
-  ['192.168.0.0', 16],
-  ['198.18.0.0', 15],    // benchmarking
-  ['198.51.100.0', 24],  // documentation
-  ['203.0.113.0', 24],   // documentation
-  ['224.0.0.0', 3],      // multicast + reserved + broadcast
-]) blocked.addSubnet(addr, prefix, 'ipv4')
-for (const [addr, prefix] of [
-  ['::', 128],           // unspecified
-  ['::1', 128],          // loopback
-  // No ::ffff:0:0/96 rule here: BlockList also matches plain IPv4 addresses
-  // against the v6 rules in mapped form, so that entry would block all of
-  // IPv4. Mapped addresses are handled explicitly in isPrivateAddress().
-  ['64:ff9b::', 96],     // NAT64 — the embedded v4 may be private
-  ['2001::', 32],        // Teredo — tunnels to an arbitrary v4 host
-  ['2002::', 16],        // 6to4 — can wrap a private v4
-  ['fc00::', 7],         // unique-local
-  ['fe80::', 10],        // link-local
-  ['fec0::', 10],        // site-local (deprecated, still routed by some stacks)
-  ['ff00::', 8],         // multicast
-]) blocked.addSubnet(addr, prefix, 'ipv6')
-
-function isPrivateAddress(ip) {
-  const family = net.isIP(ip)
-  if (family === 4) return blocked.check(ip, 'ipv4')
-  if (family === 6) {
-    if (blocked.check(ip, 'ipv6')) return true
-    // An IPv4-mapped address reaches the v4 host, so it must pass the v4 rules
-    // too. SocketAddress canonicalises the spelling to ::ffff:a.b.c.d first.
-    const canonical = new net.SocketAddress({ address: ip, family: 'ipv6' }).address
-    const mapped = canonical.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
-    return mapped ? blocked.check(mapped[1], 'ipv4') : false
-  }
-  return true                                             // unparseable → refuse
-}
-
-// Checked at socket-connect time, not beforehand. A separate "resolve, check,
-// then fetch" sequence resolves the name twice, and a DNS server with TTL 0 can
-// answer a public address to the check and an internal one to the connection
-// (DNS rebinding). Hooking the lookup the socket itself performs closes that gap:
-// whatever address passes here is the address the socket connects to.
-//
-// All answers are inspected, not just the first — a host returning one public
-// and one internal address must not slip through on the ordering.
-function guardedLookup(hostname, options, callback) {
-  dns.lookup(hostname, { ...options, all: true }, (err, addrs) => {
-    if (err) return callback(err)
-    if (!addrs.length) return callback(new Error('hostname does not resolve'))
-    if (addrs.some(a => isPrivateAddress(a.address))) {
-      return callback(new Error('target resolves to a private address'))
-    }
-    if (options.all) return callback(null, addrs)
-    callback(null, addrs[0].address, addrs[0].family)
-  })
-}
-
-// ── auth ──────────────────────────────────────────────────────────────────────
-
-async function isAuthenticated(authHeader) {
-  if (!authHeader) return false
-  return new Promise((resolve) => {
-    const req = http.get(OC_USER_URL, {
-      headers: { Authorization: authHeader, 'OCS-APIRequest': 'true' }
-    }, (res) => { res.resume(); resolve(res.statusCode === 200) })
-    req.on('error', () => resolve(false))
-    req.setTimeout(3000, () => { req.destroy(); resolve(false) })
-  })
-}
-
-// ── upstream fetch ────────────────────────────────────────────────────────────
-
-// Plain http/https instead of fetch(): only the low-level request exposes the
-// `lookup` option that guardedLookup needs. A literal IP in the URL never hits
-// the resolver, so it is checked directly.
-function requestOnce(url) {
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('only http/https allowed')
-  const literal = url.hostname.replace(/^\[|\]$/g, '')
-  if (net.isIP(literal) && isPrivateAddress(literal)) throw new Error('target resolves to a private address')
-
-  return new Promise((resolve, reject) => {
-    const mod = url.protocol === 'https:' ? https : http
-    const req = mod.request(url, {
-      method: 'GET',
-      headers: { 'User-Agent': 'opencloud-agenda-ics-proxy/2.1', 'Accept': 'text/calendar, text/plain;q=0.5' },
-      lookup: guardedLookup,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    }, resolve)
-    req.on('error', reject)
-    req.end()
-  })
-}
-
-// Redirects are followed by hand so every hop goes through requestOnce() and
-// its guards. Automatic following would let a public URL bounce straight to
-// an internal one.
-async function fetchFeed(startUrl) {
-  let url = new URL(startUrl)
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const res = await requestOnce(url)
-    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-      url = new URL(res.headers.location, url)
-      res.resume()                                        // discard the redirect body
-      continue
-    }
-    return res
-  }
-  throw new Error('too many redirects')
-}
-
-// Streams the body so an oversized feed is aborted instead of buffered whole.
-async function readCapped(res) {
-  const declared = Number(res.headers['content-length'])
-  if (Number.isFinite(declared) && declared > MAX_BYTES) {
-    res.destroy()
-    throw new Error('calendar too large')
-  }
-  const chunks = []
-  let total = 0
-  for await (const chunk of res) {
-    total += chunk.length
-    if (total > MAX_BYTES) {
-      res.destroy()
-      throw new Error('calendar too large')
-    }
-    chunks.push(chunk)
-  }
-  return Buffer.concat(chunks)
-}
-
-// ── server ────────────────────────────────────────────────────────────────────
-
-http.createServer(async (req, res) => {
-  try {
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      res.writeHead(405, { 'Allow': 'GET, HEAD' }); res.end('Method not allowed'); return
-    }
-    if (!req.url.startsWith(PATH_PREFIX)) {
-      res.writeHead(404); res.end('Not found'); return
-    }
-    if (!await isAuthenticated(req.headers['authorization'])) {
-      res.writeHead(401, { 'WWW-Authenticate': 'Bearer' })
-      res.end('Unauthorized')
-      return
-    }
-
-    // decodeURIComponent throws URIError on malformed input such as "%ZZ" —
-    // uncaught this takes the whole process down.
-    let targetUrl
-    try {
-      targetUrl = decodeURIComponent(req.url.slice(PATH_PREFIX.length))
-    } catch {
-      res.writeHead(400); res.end('Invalid URL encoding'); return
-    }
-    try {
-      new URL(targetUrl)
-    } catch {
-      res.writeHead(400); res.end('Invalid URL'); return
-    }
-
-    let upstream, body
-    try {
-      upstream = await fetchFeed(targetUrl)
-      body = await readCapped(upstream)
-    } catch (err) {
-      res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' })
-      res.end('Upstream error: ' + err.message)
-      return
-    }
-
-    // The upstream Content-Type is deliberately discarded. Echoing it would let
-    // any user serve HTML from your OpenCloud origin through this path.
-    res.writeHead(upstream.statusCode, {
-      'Content-Type': 'text/calendar; charset=utf-8',
-      'X-Content-Type-Options': 'nosniff',
-      'Content-Security-Policy': "default-src 'none'; sandbox",
-      'Content-Disposition': 'attachment; filename="calendar.ics"',
-      'Cache-Control': 'private, max-age=3600',
-    })
-    res.end(req.method === 'HEAD' ? undefined : body)
-  } catch (err) {
-    if (!res.headersSent) { res.writeHead(500); res.end('Internal error') }
-    console.error('unhandled:', err?.message)
-  }
-}).listen(PORT, () => console.log('ICS proxy listening on port ' + PORT))
-```
-
-### 2. Create the Compose project
-
-**`~/ics-proxy/compose.yaml`** — adjust `Host(...)` to your domain, and the two network names to match your setup (`docker network ls`):
-
-```yaml
-services:
-  ics-proxy:
-    image: node:20-alpine
-    container_name: ics-proxy
-    restart: always
-    working_dir: /app
-    command: node server.js
-    user: "1000:1000"
-    read_only: true
-    mem_limit: 256m
-    pids_limit: 128
-    cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - ./app:/app:ro
-    networks:
-      - traefik-public
-      - opencloud-net
-    labels:
-      traefik.enable: "true"
-      traefik.docker.network: "traefik-public"
-      traefik.http.routers.ics-proxy.rule: "Host(`cloud.example.org`) && PathPrefix(`/ics-proxy/`)"
-      traefik.http.routers.ics-proxy.priority: "100"
-      traefik.http.routers.ics-proxy.entrypoints: "https"
-      traefik.http.routers.ics-proxy.tls.certresolver: "letsencrypt"
-      traefik.http.routers.ics-proxy.service: "ics-proxy"
-      traefik.http.routers.ics-proxy.middlewares: "ics-ratelimit"
-      traefik.http.services.ics-proxy.loadbalancer.server.port: "3000"
-      traefik.http.middlewares.ics-ratelimit.ratelimit.average: "30"
-      traefik.http.middlewares.ics-ratelimit.ratelimit.burst: "60"
-      traefik.http.middlewares.ics-ratelimit.ratelimit.period: "1m"
-
-networks:
-  traefik-public:
-    external: true
-  opencloud-net:
-    name: opencloud-compose_opencloud-net
-    external: true
-```
-
-Three labels are load-bearing:
+In `~/ics-proxy/compose.yaml`, set `Host(...)` to your domain and the two network names to match your setup (`docker network ls`). Three labels are load-bearing:
 
 - **`priority: 100`** — outranks the catch-all OpenCloud router on the same host, which would otherwise swallow `/ics-proxy/` and answer with the web SPA's `index.html`.
 - **`traefik.docker.network`** — the container sits in two networks; without this Traefik may pick the wrong one.
 - **`PathPrefix`** — keeps the proxy on the same origin as the app, which is what `useSubscriptions.ts` expects (it calls `/ics-proxy/` relatively).
+
+The container runs `node:20-alpine` as an unprivileged user, read-only, with all capabilities dropped and a memory and PID limit; the Traefik middleware rate-limits it to 30 requests per minute per client.
 
 ### 3. Start it
 
@@ -513,11 +255,18 @@ curl -si https://cloud.example.org/ics-proxy/ | head -3
 
 If you get `HTTP/2 200` and an HTML body instead, the route is not reaching the container and the request is falling through to OpenCloud.
 
+### 4. Keeping it up to date
+
+Once `agenda-proxy-install` is on the server (step 3 of [`deploy/server/SETUP.md`](deploy/server/SETUP.md)), every deploy — the *Deploy Dev* workflow as well as `deploy.sh` — also ships `server.js` and `package.json` to the server. The server-side script syntax-checks the upload in the proxy's own image, swaps the files in, restarts the container and rolls back if the new version does not answer. `compose.yaml` is never touched by a deploy; it is yours.
+
+The proxy has its own test suite (`pnpm test:proxy`, run in CI) covering the address guard, the lookup hook and the fetch path — all against a local server, no network needed.
+
 ### Security notes
 
 - Every request is authenticated against OpenCloud before anything is fetched, so the proxy is not an open relay for the internet at large.
 - The remaining exposure is to **authenticated users** of your instance: they choose the URL that gets fetched. The SSRF guard is what contains that. Treat the proxy's trust level as "any account on your OpenCloud can reach these targets".
-- The guard resolves DNS and then fetches by hostname, so a hostile nameserver could in principle answer differently for the two lookups (DNS rebinding). Closing that fully requires pinning the connection to the validated IP; for an instance with a known set of users this is generally an acceptable residual risk.
+- The private-address check runs inside the DNS lookup the socket itself performs (`lookup` option of `http.request`), so the address that passes the check is the address that gets connected to. A nameserver that answers differently on each query (DNS rebinding) therefore gains nothing. Literal IPs in the URL skip the resolver and are checked directly; every redirect hop goes through the same path.
+- Addresses are matched with `net.BlockList` on their parsed form, not on the string, so alternative spellings (`::ffff:7f00:1`, `0:0:0:0:0:0:0:1`, decimal IPv4) cannot slip past, and NAT64, Teredo and 6to4 prefixes — which can wrap a private IPv4 — are refused along with the usual private, loopback and link-local ranges.
 
 ## License
 

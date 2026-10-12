@@ -36,3 +36,8 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # Zero-dependency Node script, so it has its own node:test suite rather
+      # than running under vitest's browser-like environment.
+      - name: Test ICS proxy
+        run: pnpm test:proxy

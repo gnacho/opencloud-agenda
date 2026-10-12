@@ -1,0 +1,43 @@
+# Compose project for the ICS proxy — a template, not deployed automatically.
+# Copy it next to app/ on the server once, then adjust Host(...) to your domain
+# and the two network names to your setup (`docker network ls`). Deploys only
+# ever replace app/server.js and app/package.json; this file stays yours.
+services:
+  ics-proxy:
+    image: node:20-alpine
+    container_name: ics-proxy
+    restart: always
+    working_dir: /app
+    command: node server.js
+    user: "1000:1000"
+    read_only: true
+    mem_limit: 256m
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./app:/app:ro
+    networks:
+      - traefik-public
+      - opencloud-net
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "traefik-public"
+      traefik.http.routers.ics-proxy.rule: "Host(`cloud.example.org`) && PathPrefix(`/ics-proxy/`)"
+      traefik.http.routers.ics-proxy.priority: "100"
+      traefik.http.routers.ics-proxy.entrypoints: "https"
+      traefik.http.routers.ics-proxy.tls.certresolver: "letsencrypt"
+      traefik.http.routers.ics-proxy.service: "ics-proxy"
+      traefik.http.routers.ics-proxy.middlewares: "ics-ratelimit"
+      traefik.http.services.ics-proxy.loadbalancer.server.port: "3000"
+      traefik.http.middlewares.ics-ratelimit.ratelimit.average: "30"
+      traefik.http.middlewares.ics-ratelimit.ratelimit.burst: "60"
+      traefik.http.middlewares.ics-ratelimit.ratelimit.period: "1m"
+
+networks:
+  traefik-public:
+    external: true
+  opencloud-net:
+    name: opencloud-compose_opencloud-net
+    external: true

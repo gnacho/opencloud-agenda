@@ -32,5 +32,12 @@ rsync -av --delete -e "ssh $SSH_OPTS" "$DIST_DIR/" "${REMOTE_USER}@${REMOTE_HOST
 echo "==> Restarting OpenCloud container …"
 ssh $SSH_OPTS "${REMOTE_USER}@${REMOTE_HOST}" restart
 
+# The proxy is a separate container; its two files travel as a tar stream and
+# are installed by deploy/server/agenda-proxy-install (syntax check, restart,
+# rollback if it does not come up).
+echo "==> Updating ICS proxy …"
+tar -c -C "$SCRIPT_DIR/deploy/ics-proxy" server.js package.json \
+  | ssh $SSH_OPTS "${REMOTE_USER}@${REMOTE_HOST}" proxy-install
+
 echo ""
 echo "Done. App available at: https://${REMOTE_HOST}/apps/${APP_NAME}/"

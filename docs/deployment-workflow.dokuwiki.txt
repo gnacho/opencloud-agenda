@@ -38,6 +38,8 @@ In Forgejo: **Actions → Deploy Dev → Run workflow**
 Der Workflow baut die App und deployt sie automatisch auf den Server.\\
 Danach unter ''https://cloud.linux-nerds.org/apps/opencloud-agenda/'' prüfen.
 
+Im selben Lauf wird auch der ICS-Proxy aktualisiert (''deploy/ics-proxy/server.js'' aus dem Repo). Der Server prüft die Datei erst auf Syntax, tauscht sie dann aus und startet den Container neu; antwortet der neue Proxy nicht, wird automatisch die vorherige Version zurückgespielt. Die ''compose.yaml'' auf dem Server bleibt unangetastet.
+
 ==== 3. Alternativ: Lokal deployen (ohne Forgejo) ====
 
 <code bash>
@@ -89,6 +91,7 @@ git push --tags
 ^ Was ^ Pfad ^
 | App-Verzeichnis | ''/mnt/HC_Volume_103940066/opencloud_keycloak_data/data/web/assets/apps/opencloud-agenda/'' |
 | Docker Compose | ''/home/dockeruser/opencloud-compose-keycloak/'' |
+| ICS-Proxy (Compose-Projekt) | ''/home/dockeruser/ics-proxy/'' – ''app/server.js'' kommt per Deploy, ''compose.yaml'' wird von Hand gepflegt |
 
 ==== Forgejo Secrets ====
 

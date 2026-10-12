@@ -2,8 +2,9 @@
 # Forced command for the deploy user's SSH keys — see deploy/server/SETUP.md.
 # Install as /usr/local/bin/agenda-deploy (owner root, mode 755).
 #
-# A key bound to this command can do exactly two things: upload into the app
-# directory and restart the OpenCloud containers. No shell, no other path.
+# A key bound to this command can do exactly three things: upload into the app
+# directory, restart the OpenCloud containers, and hand a new ICS proxy to
+# agenda-proxy-install. No shell, no other path.
 set -eu
 
 APP_DIR=/mnt/HC_Volume_103940066/opencloud_keycloak_data/data/web/assets/apps/opencloud-agenda
@@ -16,6 +17,11 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
     ;;
   restart)
     exec sudo -n -u dockeruser /usr/local/sbin/agenda-restart
+    ;;
+  proxy-install)
+    # The tar stream on stdin passes through sudo untouched; the script picks
+    # server.js and package.json out of it and ignores everything else.
+    exec sudo -n -u dockeruser /usr/local/sbin/agenda-proxy-install
     ;;
   *)
     echo "agenda-deploy: command not allowed: ${SSH_ORIGINAL_COMMAND:-<none>}" >&2
