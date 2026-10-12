@@ -68,6 +68,13 @@
             :title="t('Show URL and QR code')"
             @click.stop="sharingSubscription = sub"
           >{{ sub.name }}</span>
+          <span
+            v-if="fetchingSubscriptions.has(sub.id)"
+            class="mini-spinner"
+            role="status"
+            :aria-label="t('Loading…')"
+            :title="t('Loading…')"
+          />
           <button class="btn-sub-remove" :title="t('Delete')" @click.stop="removeSubscription(sub.id)">×</button>
         </li>
       </ul>
@@ -79,6 +86,10 @@
 
     <!-- Main calendar area -->
     <main class="calendar-main">
+      <!-- Every load — month change, reload, a slow feed — shows the bar; it
+           blocks nothing. The centred spinner is only for the empty first load,
+           when there is no grid content to look at yet. -->
+      <div v-if="busy" class="loading-bar" role="progressbar" :aria-label="t('Loading…')" />
       <div v-if="loading && !events.length" class="loading-overlay">
         <div class="spinner" />
       </div>
@@ -188,6 +199,7 @@ const {
   subscriptions,
   subscriptionEvents,
   subscriptionErrors,
+  fetchingSubscriptions,
   addSubscription,
   removeSubscription,
   toggleSubscription,
@@ -197,6 +209,9 @@ const {
   (name, msg) => showErrorMessage({ title: `Kalender-Fehler: ${name}`, desc: msg, timeout: 10000 }),
   (msg) => showErrorMessage({ title: 'Abonnements nicht gespeichert', desc: msg, timeout: 10000 }),
 )
+
+// Anything still on its way into the grid — CalDAV calendars or any feed.
+const busy = computed(() => loading.value || fetchingSubscriptions.value.size > 0)
 
 const subscriptionDialogOpen = ref(false)
 const sharingSubscription = ref<IcsSubscription | null>(null)
@@ -745,12 +760,62 @@ watch(calendars, () => {
   padding: 0 0.5rem;
 }
 
+.mini-spinner {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border: 2px solid var(--oc-role-outline-variant, #d0d0d0);
+  border-top-color: var(--oc-role-primary, #0082c9);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
 /* ---- Main area ---- */
 .calendar-main {
+  /* Anchor for the loading bar and the overlay — without this they attach to
+     whichever ancestor happens to be positioned. */
+  position: relative;
   flex: 1;
   min-width: 0;
   padding: 0.75rem;
   overflow: hidden;
+}
+
+/* Indeterminate bar along the top edge: a primary-coloured segment sweeping
+   over a faint track. Sits above the toolbar, takes no layout space. */
+.loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 11;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--oc-role-primary, #0082c9) 20%, transparent);
+  overflow: hidden;
+}
+.loading-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  background: var(--oc-role-primary, #0082c9);
+  border-radius: 2px;
+  animation: sweep 1.2s ease-in-out infinite;
+}
+@keyframes sweep {
+  from { left: -35%; }
+  to { left: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar::after {
+    animation: none;
+    width: 100%;
+    left: 0;
+    opacity: 0.6;
+  }
 }
 
 .loading-overlay {

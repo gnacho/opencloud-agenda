@@ -295,6 +295,36 @@ describe('useSubscriptions — persist debounce', () => {
 
 // ── Logout / user-switch cleanup tests ───────────────────────────────────────
 
+describe('useSubscriptions — fetching state', () => {
+  it('lists a subscription while its feed is in flight, success or failure', async () => {
+    const pending = new Map<string, (v: Response) => void>()
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (String(url).includes('subscriptions.json')) {
+        return Promise.resolve({ ok: true, json: async () => [
+          { id: 'ok', url: 'https://a.test/a.ics', name: 'A', color: '#f00', enabled: true },
+          { id: 'bad', url: 'https://b.test/b.ics', name: 'B', color: '#0f0', enabled: true },
+          { id: 'off', url: 'https://c.test/c.ics', name: 'C', color: '#00f', enabled: false },
+        ], headers: { get: () => null } } as unknown as Response)
+      }
+      const id = String(url).includes('a.test') ? 'ok' : 'bad'
+      return new Promise<Response>(r => pending.set(id, r))
+    }))
+
+    const { fetchingSubscriptions } = makeSubs('user-fetching', 'tok')
+    await flush()
+    // Only the enabled ones are being fetched
+    expect([...fetchingSubscriptions.value].sort()).toEqual(['bad', 'ok'])
+
+    pending.get('ok')!({ ok: true, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR', headers: { get: () => 'text/calendar' } } as unknown as Response)
+    await flush()
+    expect([...fetchingSubscriptions.value]).toEqual(['bad'])
+
+    pending.get('bad')!({ ok: false, status: 404 } as Response)
+    await flush()
+    expect(fetchingSubscriptions.value.size).toBe(0)
+  })
+})
+
 describe('useSubscriptions — logout cleanup', () => {
   it('clears subscriptionErrors when userId becomes empty', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false }) as Response))

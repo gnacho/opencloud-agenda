@@ -181,6 +181,16 @@ export function useSubscriptions(
   const subscriptions = ref<IcsSubscription[]>([])
   const subscriptionEvents = ref<CalendarEvent[]>([])
   const subscriptionErrors = ref<Record<string, string>>({})
+  // IDs of subscriptions whose feed is being fetched right now. Feeds come
+  // through the proxy from third-party servers and can take seconds; without
+  // this the sidebar gave no sign that anything was happening.
+  const fetchingSubscriptions = ref<ReadonlySet<string>>(new Set())
+
+  function setFetching(id: string, on: boolean) {
+    const next = new Set(fetchingSubscriptions.value)
+    if (on) next.add(id); else next.delete(id)
+    fetchingSubscriptions.value = next
+  }
 
   // Incremented on every logout or user-switch. Each async operation captures
   // the value at start and bails silently if it has changed by the time it
@@ -361,6 +371,7 @@ export function useSubscriptions(
 
   async function fetchOne(sub: IcsSubscription) {
     const mySession = session
+    setFetching(sub.id, true)
     try {
       const res = await fetch(proxyUrl(sub.url), {
         headers: accessToken() ? { Authorization: `Bearer ${accessToken()}` } : {},
@@ -418,6 +429,8 @@ export function useSubscriptions(
       const msg = e instanceof Error ? e.message : String(e)
       subscriptionErrors.value = { ...subscriptionErrors.value, [sub.id]: msg }
       onError?.(sub.name, msg, sub.url)
+    } finally {
+      setFetching(sub.id, false)
     }
   }
 
@@ -462,6 +475,7 @@ export function useSubscriptions(
       subscriptions.value = []
       subscriptionEvents.value = []
       subscriptionErrors.value = {}
+      fetchingSubscriptions.value = new Set()
       if (oldUid) flushAndForget(oldUid, oldToken || '')
       return
     }
@@ -490,6 +504,7 @@ export function useSubscriptions(
     subscriptions,
     subscriptionEvents,
     subscriptionErrors,
+    fetchingSubscriptions,
     addSubscription,
     removeSubscription,
     toggleSubscription,
