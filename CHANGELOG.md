@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.10.1] - 2026-10-12
 
 ### Security
 - **Feed URLs no longer outlive the login** — the subscription list was cached in `localStorage` per user and never removed, so on a shared machine the next browser user could read Google/Outlook private-feed URLs, which carry their secret in the path. The cache is now dropped on logout (user cleared, or access token cleared while the user store lags). The one exception: a cache holding changes the server never confirmed is kept, so the next login can still merge them
