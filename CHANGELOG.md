@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.10.0] - 2026-10-12
 
 ### Security
 - **ICS proxy: DNS rebinding bypassed the SSRF guard** — the proxy resolved the feed's hostname, checked the addresses, then let `fetch()` resolve it a second time. A DNS server answering with TTL 0 could return a public address to the check and an internal one (`opencloud:9200`, Keycloak, Docker services) to the connection. The check now runs inside the `lookup` hook of the socket itself, so the address that passes is the address that gets connected to — on every redirect hop as well
