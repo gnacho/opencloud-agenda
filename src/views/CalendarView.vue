@@ -154,7 +154,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useMessages } from '@opencloud-eu/web-pkg'
 import type { CalendarEvent } from '@/services/caldav'
 import { addDays, formatEventRange } from '@/utils/eventFormat'
-import { schemeForBackground } from '@/utils/theme'
+import { contrastText, isNearWhite, schemeForBackground } from '@/utils/theme'
 
 const { t, isGerman, localeTag } = useI18n()
 // Computed, not a constant: OpenCloud sets documentElement.lang only after the
@@ -274,8 +274,7 @@ const fcEvents = computed(() => {
       // Always the calendar's colour: a per-event COLOR is not a feature this
       // app offers, and stale ones left in .ics files by earlier versions would
       // otherwise override the calendar the event now lives in.
-      backgroundColor: activeCalColor(e.calendarHref),
-      borderColor: activeCalColor(e.calendarHref),
+      ...eventColors(activeCalColor(e.calendarHref)),
       extendedProps: { event: e, readonly: false },
     }))
 
@@ -285,8 +284,7 @@ const fcEvents = computed(() => {
     start: e.start,
     end: e.end,
     allDay: e.allDay,
-    backgroundColor: e.color ?? '#888',
-    borderColor: e.color ?? '#888',
+    ...eventColors(e.color ?? '#888'),
     editable: false,
     extendedProps: { event: e, readonly: true },
   }))
@@ -296,6 +294,18 @@ const fcEvents = computed(() => {
 
 function activeCalColor(href: string): string {
   return calendars.value.find(c => href.startsWith(c.href))?.color ?? '#0082c9'
+}
+
+// The colour is the user's choice and can be anything, including white. The
+// text follows it (black on light, white on dark), and a near-white chip gets
+// the outline token as border so it does not dissolve into the day cell — the
+// list view's dot and the time-grid block are drawn from borderColor too.
+function eventColors(color: string) {
+  return {
+    backgroundColor: color,
+    borderColor: isNearWhite(color) ? 'var(--oc-role-outline, #b0b0b0)' : color,
+    textColor: contrastText(color),
+  }
 }
 
 // --- native control theming ---
@@ -681,6 +691,9 @@ watch(calendars, () => {
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+  /* A hairline in the outline token keeps a white or near-white dot visible on
+     the light sidebar; on saturated colours it is barely perceptible. */
+  box-shadow: inset 0 0 0 1px var(--oc-role-outline-variant, #d0d0d0);
 }
 
 .sub-name {
