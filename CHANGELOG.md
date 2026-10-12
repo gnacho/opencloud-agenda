@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.11.0] - 2026-10-12
 
 ### Changed
 - **Loading is visible now** — the centred spinner only ever showed on the empty first load; every month change and every feed fetch after that happened without any sign except the tiny ↻ in the sidebar. A thin progress bar along the top of the calendar now runs whenever anything is still on its way — CalDAV or any subscription — without blocking the grid, and each subscription in the sidebar shows a small ring while its own feed is being fetched. The overlay is also anchored to the calendar area now; it was positioned against whichever ancestor happened to be positioned
