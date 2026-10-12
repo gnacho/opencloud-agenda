@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.10.2] - 2026-10-12
 
 ### Security
 - **ICS proxy logged the full feed URL on upstream errors** — introduced in 2.10.1 together with the sanitised client messages. Google and Outlook private feeds carry their secret in the path, so the container log would have collected them. The log line now names the feed's host and a short hash, never the URL
