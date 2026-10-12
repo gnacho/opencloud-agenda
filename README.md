@@ -13,11 +13,12 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 8.x, bui
 - **Create, edit and delete events** via a clean dialog — including drag & drop and resize
 - **Recurring events** — create and edit series with full RRULE support (daily, weekly, monthly by day or Nth weekday, yearly; end by count or date); recurring events are marked with ↻
 - **CalDAV sync** — compatible with Thunderbird, DAVx⁵ and other CalDAV clients; Thunderbird-created recurring events are correctly expanded and editable
-- **Calendar management** — create calendars with custom colors, rename by double-click, show/hide per calendar
+- **Calendar management** — create calendars with custom colors, rename by double-click, show/hide per calendar. Any colour works: event text switches to black on light colours, and near-white chips get an outline
 - **Move events between calendars** — change the calendar in the edit dialog
 - **iCal subscriptions** *(experimental, requires additional server setup — see below)* — add external `.ics` calendars (public holidays, team calendars) as read-only feeds. Accepts plain `.ics` URLs, `webcal://` links, and Google Calendar "Add to Calendar" links (`?cid=…`)
 - **Event overflow** — month view caps events per cell and shows a "+N more" link; clicking opens a popover with all events for that day
 - **Manual refresh** — ↻ button in the sidebar reloads all data and subscriptions from the server on demand
+- **Visible loading** — a thin progress bar runs along the top of the calendar while anything is still on its way, and each subscription shows a small ring while its feed is being fetched
 - **Bilingual UI** — English and German, based on the browser/OpenCloud language setting
 - **Dark mode support** — follows the OpenCloud theme
 - **Secure token management** — app tokens are cached per tab in `sessionStorage` (24 h TTL), refreshed automatically on expiry, and revoked on the server at logout
