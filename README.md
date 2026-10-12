@@ -107,7 +107,7 @@ Refer to the [OpenCloud web-app-skeleton](https://github.com/opencloud-eu/web-ap
 - FullCalendar icon fonts are replaced with Unicode characters to comply with the OpenCloud Content Security Policy (`font-src 'self'` — no `data:` URIs allowed).
 - Recurring events are expanded client-side by ical.js (±2 years). Editing a recurring event uses GET → patch → PUT to preserve the RRULE and all other ICS properties.
 - All ICS text values are RFC 5545-escaped; CalDAV XML payloads use proper XML entity escaping.
-- ICS subscriptions are fetched server-side via a small Node.js proxy (`/ics-proxy/`) to avoid browser CORS restrictions. The proxy validates the user's Bearer token against OpenCloud, then blocks targets that resolve to private, loopback or link-local addresses before forwarding the request.
+- ICS subscriptions are fetched server-side via a small Node.js proxy (`/ics-proxy/`) to avoid browser CORS restrictions. The proxy validates the user's Bearer token against OpenCloud and refuses targets on private, loopback, link-local or tunnelling (NAT64, Teredo, 6to4) addresses. The check runs inside the socket's own DNS lookup — not as a separate resolve beforehand — so a rebinding DNS server cannot answer differently to the check and the connection.
 - Subscription responses are checked for a `BEGIN:VCALENDAR` prelude. A misrouted `/ics-proxy/` path answers HTTP 200 with the OpenCloud web SPA's `index.html`, which would otherwise parse to an empty event list and present a broken subscription as an empty but healthy one.
 
 ## Theming — read this before touching any colour
@@ -226,7 +226,7 @@ mkdir -p ~/ics-proxy/app && cd ~/ics-proxy
 ```json
 {
   "name": "ics-proxy",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "main": "server.js"
 }
@@ -235,7 +235,8 @@ mkdir -p ~/ics-proxy/app && cd ~/ics-proxy
 **`~/ics-proxy/app/server.js`**
 ```js
 import http from 'http'
-import dns from 'dns/promises'
+import https from 'https'
+import dns from 'dns'
 import net from 'net'
 
 const PORT = 3000
@@ -247,60 +248,71 @@ const TIMEOUT_MS = 10000
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
 
-function isPrivateV4(ip) {
-  const p = ip.split('.').map(Number)
-  if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true
-  const [a, b] = p
-  if (a === 0 || a === 10 || a === 127) return true
-  if (a === 169 && b === 254) return true                 // link-local + cloud metadata
-  if (a === 172 && b >= 16 && b <= 31) return true
-  if (a === 192 && b === 168) return true
-  if (a === 100 && b >= 64 && b <= 127) return true       // CGNAT
-  if (a === 192 && b === 0) return true
-  if (a === 198 && (b === 18 || b === 19)) return true
-  if (a === 198 && b === 51) return true
-  if (a === 203 && b === 0) return true
-  if (a >= 224) return true                               // multicast + reserved + broadcast
-  return false
-}
-
-function isPrivateV6(ip) {
-  const a = ip.toLowerCase().split('%')[0]                // strip zone index
-  if (a === '::1' || a === '::') return true
-  const mapped = a.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
-  if (mapped) return isPrivateV4(mapped[1])
-  if (/^f[cd]/.test(a)) return true                       // fc00::/7 unique-local
-  if (/^fe[89ab]/.test(a)) return true                    // fe80::/10 link-local
-  if (/^ff/.test(a)) return true                          // multicast
-  if (/^2002:/.test(a)) return true                       // 6to4, can wrap a private v4
-  return false
-}
+// net.BlockList parses addresses into binary form before matching, so every
+// spelling of the same address is caught: ::ffff:7f00:1 and ::ffff:127.0.0.1,
+// 0:0:0:0:0:0:0:1 and ::1. A hand-written regex over the string misses those.
+const blocked = new net.BlockList()
+for (const [addr, prefix] of [
+  ['0.0.0.0', 8],        // "this" network
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],    // CGNAT
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],   // link-local + cloud metadata
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],    // benchmarking
+  ['198.51.100.0', 24],  // documentation
+  ['203.0.113.0', 24],   // documentation
+  ['224.0.0.0', 3],      // multicast + reserved + broadcast
+]) blocked.addSubnet(addr, prefix, 'ipv4')
+for (const [addr, prefix] of [
+  ['::', 128],           // unspecified
+  ['::1', 128],          // loopback
+  // No ::ffff:0:0/96 rule here: BlockList also matches plain IPv4 addresses
+  // against the v6 rules in mapped form, so that entry would block all of
+  // IPv4. Mapped addresses are handled explicitly in isPrivateAddress().
+  ['64:ff9b::', 96],     // NAT64 — the embedded v4 may be private
+  ['2001::', 32],        // Teredo — tunnels to an arbitrary v4 host
+  ['2002::', 16],        // 6to4 — can wrap a private v4
+  ['fc00::', 7],         // unique-local
+  ['fe80::', 10],        // link-local
+  ['fec0::', 10],        // site-local (deprecated, still routed by some stacks)
+  ['ff00::', 8],         // multicast
+]) blocked.addSubnet(addr, prefix, 'ipv6')
 
 function isPrivateAddress(ip) {
-  const v = net.isIP(ip)
-  if (v === 4) return isPrivateV4(ip)
-  if (v === 6) return isPrivateV6(ip)
+  const family = net.isIP(ip)
+  if (family === 4) return blocked.check(ip, 'ipv4')
+  if (family === 6) {
+    if (blocked.check(ip, 'ipv6')) return true
+    // An IPv4-mapped address reaches the v4 host, so it must pass the v4 rules
+    // too. SocketAddress canonicalises the spelling to ::ffff:a.b.c.d first.
+    const canonical = new net.SocketAddress({ address: ip, family: 'ipv6' }).address
+    const mapped = canonical.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+    return mapped ? blocked.check(mapped[1], 'ipv4') : false
+  }
   return true                                             // unparseable → refuse
 }
 
-// Rejects the hostname unless every address it resolves to is public. Checking
-// all answers (not just the first) stops a host that returns one public and one
-// internal address from slipping through.
-async function assertPublicHost(hostname) {
-  if (net.isIP(hostname)) {
-    if (isPrivateAddress(hostname)) throw new Error('target resolves to a private address')
-    return
-  }
-  let addrs
-  try {
-    addrs = await dns.lookup(hostname, { all: true })
-  } catch {
-    throw new Error('hostname does not resolve')
-  }
-  if (!addrs.length) throw new Error('hostname does not resolve')
-  for (const { address } of addrs) {
-    if (isPrivateAddress(address)) throw new Error('target resolves to a private address')
-  }
+// Checked at socket-connect time, not beforehand. A separate "resolve, check,
+// then fetch" sequence resolves the name twice, and a DNS server with TTL 0 can
+// answer a public address to the check and an internal one to the connection
+// (DNS rebinding). Hooking the lookup the socket itself performs closes that gap:
+// whatever address passes here is the address the socket connects to.
+//
+// All answers are inspected, not just the first — a host returning one public
+// and one internal address must not slip through on the ordering.
+function guardedLookup(hostname, options, callback) {
+  dns.lookup(hostname, { ...options, all: true }, (err, addrs) => {
+    if (err) return callback(err)
+    if (!addrs.length) return callback(new Error('hostname does not resolve'))
+    if (addrs.some(a => isPrivateAddress(a.address))) {
+      return callback(new Error('target resolves to a private address'))
+    }
+    if (options.all) return callback(null, addrs)
+    callback(null, addrs[0].address, addrs[0].family)
+  })
 }
 
 // ── auth ──────────────────────────────────────────────────────────────────────
@@ -318,25 +330,37 @@ async function isAuthenticated(authHeader) {
 
 // ── upstream fetch ────────────────────────────────────────────────────────────
 
-// Redirects are followed by hand so every hop passes assertPublicHost(). With
-// fetch's own redirect:'follow' a public URL could bounce straight to an
-// internal one and the guard above would never see it.
-async function fetchFeed(startUrl) {
-  let url = startUrl
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const parsed = new URL(url)
-    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('only http/https allowed')
-    await assertPublicHost(parsed.hostname)
+// Plain http/https instead of fetch(): only the low-level request exposes the
+// `lookup` option that guardedLookup needs. A literal IP in the URL never hits
+// the resolver, so it is checked directly.
+function requestOnce(url) {
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('only http/https allowed')
+  const literal = url.hostname.replace(/^\[|\]$/g, '')
+  if (net.isIP(literal) && isPrivateAddress(literal)) throw new Error('target resolves to a private address')
 
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'opencloud-agenda-ics-proxy/2.0', 'Accept': 'text/calendar, text/plain;q=0.5' },
-      redirect: 'manual',
+  return new Promise((resolve, reject) => {
+    const mod = url.protocol === 'https:' ? https : http
+    const req = mod.request(url, {
+      method: 'GET',
+      headers: { 'User-Agent': 'opencloud-agenda-ics-proxy/2.1', 'Accept': 'text/calendar, text/plain;q=0.5' },
+      lookup: guardedLookup,
       signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    }, resolve)
+    req.on('error', reject)
+    req.end()
+  })
+}
 
-    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-      url = new URL(res.headers.get('location'), url).toString()
-      if (res.body) await res.body.cancel()
+// Redirects are followed by hand so every hop goes through requestOnce() and
+// its guards. Automatic following would let a public URL bounce straight to
+// an internal one.
+async function fetchFeed(startUrl) {
+  let url = new URL(startUrl)
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const res = await requestOnce(url)
+    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+      url = new URL(res.headers.location, url)
+      res.resume()                                        // discard the redirect body
       continue
     }
     return res
@@ -346,14 +370,19 @@ async function fetchFeed(startUrl) {
 
 // Streams the body so an oversized feed is aborted instead of buffered whole.
 async function readCapped(res) {
-  const declared = Number(res.headers.get('content-length'))
-  if (Number.isFinite(declared) && declared > MAX_BYTES) throw new Error('calendar too large')
-  if (!res.body) return Buffer.alloc(0)
+  const declared = Number(res.headers['content-length'])
+  if (Number.isFinite(declared) && declared > MAX_BYTES) {
+    res.destroy()
+    throw new Error('calendar too large')
+  }
   const chunks = []
   let total = 0
-  for await (const chunk of res.body) {
+  for await (const chunk of res) {
     total += chunk.length
-    if (total > MAX_BYTES) throw new Error('calendar too large')
+    if (total > MAX_BYTES) {
+      res.destroy()
+      throw new Error('calendar too large')
+    }
     chunks.push(chunk)
   }
   return Buffer.concat(chunks)
@@ -401,7 +430,7 @@ http.createServer(async (req, res) => {
 
     // The upstream Content-Type is deliberately discarded. Echoing it would let
     // any user serve HTML from your OpenCloud origin through this path.
-    res.writeHead(upstream.status, {
+    res.writeHead(upstream.statusCode, {
       'Content-Type': 'text/calendar; charset=utf-8',
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': "default-src 'none'; sandbox",
