@@ -16,6 +16,32 @@ export function toWebcalUrl(url: string): string {
 //
 // Both hosts serve the same resource, so pointing straight at the target is
 // safe and spares every consumer the extra hop.
+// What the "Add subscription" dialog accepts. Returns the URL that gets stored,
+// or null if the input is not an http(s) feed address.
+//
+// - webcal:// is what calendar apps hand out; it is plain https underneath.
+// - Google's "add calendar" links wrap the real feed in a ?cid= parameter.
+// - Only http(s) is kept: the proxy refuses anything else anyway, but the URL
+//   also ends up in the share dialog's QR code and input field, and a
+//   javascript: or data: URL has no business there.
+export function normalizeSubscriptionUrl(raw: string): string | null {
+  let url = raw.trim()
+  if (/^webcal:\/\//i.test(url)) url = 'https://' + url.slice('webcal://'.length)
+  try {
+    const cid = new URL(url).searchParams.get('cid')
+    if (cid) url = cid.trim()
+  } catch {
+    return null
+  }
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+  } catch {
+    return null
+  }
+  return canonicalFeedUrl(url)
+}
+
 export function canonicalFeedUrl(url: string): string {
   return url.replace(
     /^(https?:\/\/)www\.google\.com\/calendar\/ical\//i,

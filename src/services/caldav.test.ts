@@ -43,6 +43,8 @@ describe('escapeIcs', () => {
   it('escapes comma', () => expect(escapeIcs('a,b')).toBe('a\\,b'))
   it('escapes LF newline', () => expect(escapeIcs('a\nb')).toBe('a\\nb'))
   it('escapes CRLF newline', () => expect(escapeIcs('a\r\nb')).toBe('a\\nb'))
+  it('escapes a bare CR as one newline', () => expect(escapeIcs('a\rb')).toBe('a\\nb'))
+  it('does not double up CRLF into two newlines', () => expect(escapeIcs('a\r\n\r\nb')).toBe('a\\n\\nb'))
   it('passes through plain text unchanged', () => expect(escapeIcs('hello world')).toBe('hello world'))
 })
 

@@ -315,6 +315,58 @@ describe('useSubscriptions — logout cleanup', () => {
     expect(subscriptionErrors.value).toEqual({})
   })
 
+  // Feed URLs can be capability URLs (Google/Outlook private feeds); the cache
+  // must not outlive the login on a shared machine.
+  it('removes the localStorage cache when userId becomes empty', async () => {
+    const serverSubs = [{ id: 's', url: 'https://example.org/private-token.ics', name: 'S', color: '#f00', enabled: true }]
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      String(url).includes('subscriptions.json')
+        ? { ok: true, json: async () => serverSubs, headers: { get: () => null } } as unknown as Response
+        : { ok: false } as Response))
+
+    const { userId } = makeSubs('user-cache', 'tok')
+    await flush()
+    expect(localStorageData['agenda_subscriptions_user-cache']).toBeDefined()
+
+    userId.value = ''
+    await flush()
+    expect(localStorageData['agenda_subscriptions_user-cache']).toBeUndefined()
+  })
+
+  it('removes the cache when the access token goes away while the user is still set', async () => {
+    const serverSubs = [{ id: 's', url: 'https://example.org/x.ics', name: 'S', color: '#f00', enabled: true }]
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      String(url).includes('subscriptions.json')
+        ? { ok: true, json: async () => serverSubs, headers: { get: () => null } } as unknown as Response
+        : { ok: false } as Response))
+
+    const { accessToken, subscriptions } = makeSubs('user-tok', 'tok')
+    await flush()
+    expect(localStorageData['agenda_subscriptions_user-tok']).toBeDefined()
+
+    // OpenCloud Web clears the token first on logout; the user store may lag
+    accessToken.value = ''
+    await flush()
+    expect(localStorageData['agenda_subscriptions_user-tok']).toBeUndefined()
+    // in-memory list untouched — a returning token simply reloads from the server
+    expect(subscriptions.value).toEqual(serverSubs)
+  })
+
+  it('keeps the cache on logout while it holds unsynced changes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false }) as Response))
+
+    // No token: the add below stays local and marks the cache unsynced
+    const { userId, addSubscription } = makeSubs('user-dirty', '')
+    await flush()
+    addSubscription('https://example.org/x.ics', 'X', '#f00')
+    expect(localStorageData['agenda_subscriptions_user-dirty_unsynced']).toBe('1')
+
+    userId.value = ''
+    await flush()
+    // The only copy of that URL — kept so the next login can push it
+    expect(localStorageData['agenda_subscriptions_user-dirty']).toBeDefined()
+  })
+
   it('discards load() result that resolves after logout', async () => {
     let resolveLoad!: (v: Response) => void
     const slowFetch = vi.fn(() => new Promise<Response>(r => { resolveLoad = r }))

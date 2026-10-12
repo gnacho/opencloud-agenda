@@ -76,7 +76,7 @@ const translations: Record<string, string> = {
   'iCal URL (.ics)': 'iCal-URL (.ics)',
   'e.g. Public Holidays': 'z. B. Feiertage',
   'Add': 'Hinzufügen',
-  'Please enter a valid URL.': 'Bitte eine gültige URL eingeben.',
+  'Please enter a valid http(s) or webcal URL.': 'Bitte eine gültige http(s)- oder webcal-URL eingeben.',
   'Show URL and QR code': 'URL und QR-Code anzeigen',
   'Scan this code to add the calendar on another device.': 'Diesen Code scannen, um den Kalender auf einem anderen Gerät hinzuzufügen.',
   'Copy URL': 'URL kopieren',

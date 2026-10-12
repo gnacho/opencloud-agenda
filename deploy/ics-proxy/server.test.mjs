@@ -59,9 +59,10 @@ describe('guardedLookup', () => {
     const { err } = await run(resolveTo([]))
     assert.match(err.message, /does not resolve/)
   })
-  test('propagates resolver errors', async () => {
-    const { err } = await run((h, o, cb) => cb(new Error('ENOTFOUND')))
-    assert.equal(err.message, 'ENOTFOUND')
+  test('turns resolver errors into the generic "does not resolve"', async () => {
+    const { err } = await run((h, o, cb) => cb(new Error('getaddrinfo ENOTFOUND host.test')))
+    assert.match(err.message, /does not resolve/)
+    assert.doesNotMatch(err.message, /ENOTFOUND/)
   })
 })
 
@@ -69,6 +70,7 @@ describe('proxy end to end', () => {
   let feed, auth, feedPort, authPort
   let strict, strictPort      // real address guard, names resolve to the local feed
   let lenient, lenientPort    // guard disabled, to exercise the fetch path itself
+  let authCalls = []          // Authorization headers OpenCloud was asked about
 
   before(async () => {
     feed = http.createServer((req, res) => {
@@ -98,7 +100,8 @@ describe('proxy end to end', () => {
     feedPort = await listen(feed)
 
     auth = http.createServer((req, res) => {
-      const ok = req.headers.authorization === 'Bearer good' && req.headers['ocs-apirequest'] === 'true'
+      authCalls.push(req.headers.authorization)
+      const ok = /^Bearer good/.test(req.headers.authorization) && req.headers['ocs-apirequest'] === 'true'
       res.writeHead(ok ? 200 : 401); res.end()
     })
     authPort = await listen(auth)
@@ -143,6 +146,37 @@ describe('proxy end to end', () => {
     })
   })
 
+  describe('auth cache', () => {
+    // A fresh server so earlier tests' tokens do not sit in its cache
+    let own, ownPort
+    before(async () => {
+      own = createProxyServer({ ocUserUrl: `http://127.0.0.1:${authPort}/user`, lookup: fakeLookup('127.0.0.1'), isPrivate: () => false })
+      ownPort = await listen(own)
+    })
+    after(() => own.close())
+
+    test('asks OpenCloud once per token, not once per feed', async () => {
+      authCalls = []
+      for (let i = 0; i < 5; i++) {
+        const r = await via(ownPort, feedUrl('/feed.ics'), { headers: { Authorization: 'Bearer good-cached' } })
+        assert.equal(r.status, 200)
+      }
+      assert.deepEqual(authCalls, ['Bearer good-cached'])
+    })
+    test('a different token is verified on its own', async () => {
+      authCalls = []
+      await via(ownPort, feedUrl('/feed.ics'), { headers: { Authorization: 'Bearer good-other' } })
+      await via(ownPort, feedUrl('/feed.ics'), { headers: { Authorization: 'Bearer good-cached' } })
+      assert.deepEqual(authCalls, ['Bearer good-other'])
+    })
+    test('rejections are not cached', async () => {
+      authCalls = []
+      assert.equal((await via(ownPort, feedUrl('/feed.ics'), { headers: { Authorization: 'Bearer bad' } })).status, 401)
+      assert.equal((await via(ownPort, feedUrl('/feed.ics'), { headers: { Authorization: 'Bearer bad' } })).status, 401)
+      assert.deepEqual(authCalls, ['Bearer bad', 'Bearer bad'])
+    })
+  })
+
   describe('SSRF guard', () => {
     for (const target of [
       'http://127.0.0.1:1/', 'http://[::1]:1/', 'http://[::ffff:7f00:1]:1/', 'http://[64:ff9b::7f00:1]:1/',
@@ -156,6 +190,11 @@ describe('proxy end to end', () => {
     test('a hostname is checked inside the socket lookup', async () => {
       // feed.test resolves (via the injected lookup) to 127.0.0.1 — the guard
       // must catch it there, i.e. at connect time, not through a pre-check.
+      //
+      // Runs after the auth-cache tests have fetched feed.test successfully
+      // through another instance on purpose: with a shared global agent the
+      // strict instance would get that pooled keep-alive socket back without
+      // any lookup and answer 200. Each instance owns its agents for that.
       const r = await via(strictPort, feedUrl('/feed.ics'))
       assert.equal(r.status, 502)
       assert.match(await r.text(), /private address/)
@@ -218,6 +257,14 @@ describe('proxy end to end', () => {
       const r = await via(lenientPort, feedUrl('/big-streamed'))
       assert.equal(r.status, 502)
       assert.match(await r.text(), /too large/)
+    })
+    test('a connection failure is reported without the address it failed on', async () => {
+      // Port 1 is closed; Node's own message would be "connect ECONNREFUSED 127.0.0.1:1"
+      const r = await via(lenientPort, 'http://127.0.0.1:1/x.ics')
+      assert.equal(r.status, 502)
+      const body = await r.text()
+      assert.equal(body, 'Upstream error: feed not reachable')
+      assert.doesNotMatch(body, /127\.0\.0\.1|ECONNREFUSED/)
     })
   })
 })

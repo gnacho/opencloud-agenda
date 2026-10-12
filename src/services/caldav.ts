@@ -30,9 +30,11 @@ export function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
 }
 
-// Escape iCalendar TEXT values per RFC 5545 §3.3.11.
+// Escape iCalendar TEXT values per RFC 5545 §3.3.11. A bare CR counts as a
+// line break too — some parsers split on it, and a value read from a foreign
+// feed can carry one without the LF.
 export function escapeIcs(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
+  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n')
 }
 
 // Colours come from server data (calendar-color, ICS COLOR, subscriptions.json)

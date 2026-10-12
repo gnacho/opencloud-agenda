@@ -1,5 +1,48 @@
 import { describe, it, expect } from 'vitest'
-import { toWebcalUrl, canonicalFeedUrl } from './subscriptionUrl'
+import { toWebcalUrl, canonicalFeedUrl, normalizeSubscriptionUrl } from './subscriptionUrl'
+
+describe('normalizeSubscriptionUrl', () => {
+  it('accepts https and http', () => {
+    expect(normalizeSubscriptionUrl('https://example.org/cal.ics')).toBe('https://example.org/cal.ics')
+    expect(normalizeSubscriptionUrl('http://example.org/cal.ics')).toBe('http://example.org/cal.ics')
+  })
+
+  it('turns webcal into https, case-insensitively', () => {
+    expect(normalizeSubscriptionUrl('webcal://example.org/cal.ics')).toBe('https://example.org/cal.ics')
+    expect(normalizeSubscriptionUrl('WEBCAL://example.org/cal.ics')).toBe('https://example.org/cal.ics')
+  })
+
+  it('trims whitespace', () => {
+    expect(normalizeSubscriptionUrl('  https://example.org/cal.ics \n')).toBe('https://example.org/cal.ics')
+  })
+
+  it('unwraps the feed from a Google ?cid= link', () => {
+    expect(normalizeSubscriptionUrl('https://calendar.google.com/calendar/r?cid=https://calendar.google.com/calendar/ical/x/public/basic.ics'))
+      .toBe('https://calendar.google.com/calendar/ical/x/public/basic.ics')
+  })
+
+  it('canonicalises www.google.com feeds', () => {
+    expect(normalizeSubscriptionUrl('https://www.google.com/calendar/ical/x/public/basic.ics'))
+      .toBe('https://calendar.google.com/calendar/ical/x/public/basic.ics')
+  })
+
+  it('rejects anything that is not http(s)', () => {
+    // `httpfoo://` passed the old startsWith('http') check
+    for (const bad of ['javascript:alert(1)', 'data:text/calendar,BEGIN', 'ftp://example.org/x.ics', 'httpfoo://example.org/x.ics', 'file:///etc/passwd']) {
+      expect(normalizeSubscriptionUrl(bad)).toBeNull()
+    }
+  })
+
+  it('rejects a cid that is not http(s) either', () => {
+    expect(normalizeSubscriptionUrl('https://calendar.google.com/calendar/r?cid=javascript:alert(1)')).toBeNull()
+  })
+
+  it('rejects text that is not a URL at all', () => {
+    expect(normalizeSubscriptionUrl('')).toBeNull()
+    expect(normalizeSubscriptionUrl('not a url')).toBeNull()
+    expect(normalizeSubscriptionUrl('example.org/cal.ics')).toBeNull()
+  })
+})
 
 describe('toWebcalUrl', () => {
   it('swaps https for webcal', () => {

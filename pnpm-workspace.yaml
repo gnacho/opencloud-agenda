@@ -13,3 +13,6 @@ overrides:
   axios: 1.20.0
   adm-zip: ^0.6.1
   ws: ^8.21.2
+  # GHSA-68fv-2mgg-jv7q (event-loop DoS); reached only through the Vue
+  # compiler at build time, but there is no reason to keep the hit in `pnpm audit`
+  source-map-js: '>=1.2.2'

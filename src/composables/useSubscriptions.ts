@@ -45,6 +45,17 @@ function saveToStorage(userId: string, subs: IcsSubscription[]) {
   localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(subs))
 }
 
+// Feed URLs are often capability URLs — Google's and Outlook's private feeds
+// carry their secret in the path — and localStorage outlives the login. On
+// logout the cache goes, unless it holds changes the server never confirmed:
+// those are kept so the next login can merge them (see mergeSubscriptions),
+// because a lost feed URL is gone for good while a lingering one can still be
+// removed by hand.
+function forgetCache(userId: string) {
+  if (!userId || hasUnsynced(userId)) return
+  try { localStorage.removeItem(STORAGE_KEY_PREFIX + userId) } catch { /* ignore */ }
+}
+
 // ── unsynced marker ───────────────────────────────────────────────────────────
 // Records that the local list holds changes the server has not confirmed. It
 // lives in localStorage rather than in a closure variable so it survives a page
@@ -363,6 +374,7 @@ export function useSubscriptions(
           410: 'Kalender wurde permanent entfernt',
           429: 'Zu viele Anfragen – bitte später versuchen',
           500: 'Server-Fehler',
+          502: 'Kalender-Feed nicht erreichbar oder vom Proxy abgelehnt',
           503: 'Dienst nicht verfügbar',
         }
         const reason = reasons[res.status] ?? `Unbekannter Fehler`
@@ -426,8 +438,14 @@ export function useSubscriptions(
       subscriptions.value = []
       subscriptionEvents.value = []
       subscriptionErrors.value = {}
+      if (oldUid) forgetCache(oldUid)
       return
     }
+    // OpenCloud Web clears the access token on logout; the user store may
+    // still hold the user while the page navigates to the identity provider.
+    // useAuth treats this moment as logout (it revokes the app token), and so
+    // does the cache. The in-memory list stays — load() refetches on return.
+    if (!token && oldToken) forgetCache(uid)
     if (uid !== oldUid || (token && !oldToken)) {
       session++  // invalidate requests from the previous user/session
       if (uid !== oldUid) {

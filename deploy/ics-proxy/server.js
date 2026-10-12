@@ -9,6 +9,7 @@ import http from 'http'
 import https from 'https'
 import dns from 'dns'
 import net from 'net'
+import { createHash } from 'crypto'
 import { pathToFileURL } from 'url'
 
 const PORT = Number(process.env.PORT) || 3000
@@ -17,6 +18,14 @@ const OC_USER_URL = process.env.OC_USER_URL || 'http://opencloud:9200/ocs/v2.php
 const MAX_BYTES = 10 * 1024 * 1024   // refuse feeds larger than 10 MB
 const MAX_REDIRECTS = 5
 const TIMEOUT_MS = 10000
+const AUTH_CACHE_MS = 60 * 1000      // how long a token verified against OpenCloud stays verified
+const AUTH_CACHE_MAX = 1000          // entries, before the cache is simply dropped
+
+// Errors with a message that is safe to show the client. Everything else —
+// ECONNREFUSED with the resolved address, DNS details, TLS failures — is logged
+// here and reported outside as "feed not reachable", so the proxy does not
+// describe its surroundings to whoever picks the URL.
+class UpstreamError extends Error {}
 
 // ── SSRF guard ────────────────────────────────────────────────────────────────
 
@@ -81,10 +90,10 @@ export function isPrivateAddress(ip) {
 export function makeGuardedLookup({ lookup = dns.lookup, isPrivate = isPrivateAddress } = {}) {
   return function guardedLookup(hostname, options, callback) {
     lookup(hostname, { ...options, all: true }, (err, addrs) => {
-      if (err) return callback(err)
-      if (!addrs.length) return callback(new Error('hostname does not resolve'))
+      if (err) return callback(new UpstreamError('hostname does not resolve'))
+      if (!addrs.length) return callback(new UpstreamError('hostname does not resolve'))
       if (addrs.some(a => isPrivate(a.address))) {
-        return callback(new Error('target resolves to a private address'))
+        return callback(new UpstreamError('target resolves to a private address'))
       }
       if (options.all) return callback(null, addrs)
       callback(null, addrs[0].address, addrs[0].family)
@@ -94,8 +103,7 @@ export function makeGuardedLookup({ lookup = dns.lookup, isPrivate = isPrivateAd
 
 // ── auth ──────────────────────────────────────────────────────────────────────
 
-function isAuthenticated(ocUserUrl, authHeader) {
-  if (!authHeader) return Promise.resolve(false)
+function askOpenCloud(ocUserUrl, authHeader) {
   return new Promise((resolve) => {
     const req = http.get(ocUserUrl, {
       headers: { Authorization: authHeader, 'OCS-APIRequest': 'true' }
@@ -105,15 +113,36 @@ function isAuthenticated(ocUserUrl, authHeader) {
   })
 }
 
+// One OpenCloud round trip per token per minute instead of one per feed: a
+// user with eight subscriptions otherwise costs eight OCS calls on every
+// reload, and a client hammering the proxy with a bad token costs one each.
+// Only positive answers are cached, keyed by a hash so the map never holds a
+// usable token. An OpenCloud access token lives for minutes to hours, so a
+// revoked one being honoured for up to 60 s more is within its own lifetime.
+function makeAuthenticator(ocUserUrl) {
+  const verified = new Map()   // sha256(header) → expiry (ms)
+  return async function isAuthenticated(authHeader) {
+    if (!authHeader) return false
+    const key = createHash('sha256').update(authHeader).digest('hex')
+    const now = Date.now()
+    const until = verified.get(key)
+    if (until && until > now) return true
+    if (!await askOpenCloud(ocUserUrl, authHeader)) return false
+    if (verified.size >= AUTH_CACHE_MAX) verified.clear()
+    verified.set(key, now + AUTH_CACHE_MS)
+    return true
+  }
+}
+
 // ── upstream fetch ────────────────────────────────────────────────────────────
 
 // Plain http/https instead of fetch(): only the low-level request exposes the
 // `lookup` option that guardedLookup needs. A literal IP in the URL never hits
 // the resolver, so it is checked directly.
-function requestOnce(url, { guardedLookup, isPrivate }) {
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('only http/https allowed')
+function requestOnce(url, { guardedLookup, isPrivate, agents }) {
+  if (!['http:', 'https:'].includes(url.protocol)) throw new UpstreamError('only http/https allowed')
   const literal = url.hostname.replace(/^\[|\]$/g, '')
-  if (net.isIP(literal) && isPrivate(literal)) throw new Error('target resolves to a private address')
+  if (net.isIP(literal) && isPrivate(literal)) throw new UpstreamError('target resolves to a private address')
 
   return new Promise((resolve, reject) => {
     const mod = url.protocol === 'https:' ? https : http
@@ -121,6 +150,7 @@ function requestOnce(url, { guardedLookup, isPrivate }) {
       method: 'GET',
       headers: { 'User-Agent': 'opencloud-agenda-ics-proxy/2.1', 'Accept': 'text/calendar, text/plain;q=0.5' },
       lookup: guardedLookup,
+      agent: agents[url.protocol],
       signal: AbortSignal.timeout(TIMEOUT_MS),
     }, resolve)
     req.on('error', reject)
@@ -142,7 +172,7 @@ async function fetchFeed(startUrl, guards) {
     }
     return res
   }
-  throw new Error('too many redirects')
+  throw new UpstreamError('too many redirects')
 }
 
 // Streams the body so an oversized feed is aborted instead of buffered whole.
@@ -150,7 +180,7 @@ async function readCapped(res) {
   const declared = Number(res.headers['content-length'])
   if (Number.isFinite(declared) && declared > MAX_BYTES) {
     res.destroy()
-    throw new Error('calendar too large')
+    throw new UpstreamError('calendar too large')
   }
   const chunks = []
   let total = 0
@@ -158,17 +188,32 @@ async function readCapped(res) {
     total += chunk.length
     if (total > MAX_BYTES) {
       res.destroy()
-      throw new Error('calendar too large')
+      throw new UpstreamError('calendar too large')
     }
     chunks.push(chunk)
   }
   return Buffer.concat(chunks)
 }
 
+function clientMessage(err) {
+  if (err instanceof UpstreamError) return err.message
+  if (err?.name === 'TimeoutError' || err?.name === 'AbortError') return 'feed did not answer in time'
+  return 'feed not reachable'
+}
+
 // ── server ────────────────────────────────────────────────────────────────────
 
 export function createProxyServer({ ocUserUrl = OC_USER_URL, lookup, isPrivate = isPrivateAddress } = {}) {
-  const guards = { guardedLookup: makeGuardedLookup({ lookup, isPrivate }), isPrivate }
+  // Own connection pools, not the process-global agent. A pooled keep-alive
+  // socket is reused by host:port without a new lookup — correct here, since
+  // every socket in these pools was opened through guardedLookup, but a shared
+  // agent could hand us a socket that something else in the process opened.
+  const agents = {
+    'http:': new http.Agent({ keepAlive: true }),
+    'https:': new https.Agent({ keepAlive: true }),
+  }
+  const guards = { guardedLookup: makeGuardedLookup({ lookup, isPrivate }), isPrivate, agents }
+  const isAuthenticated = makeAuthenticator(ocUserUrl)
 
   return http.createServer(async (req, res) => {
     try {
@@ -178,7 +223,7 @@ export function createProxyServer({ ocUserUrl = OC_USER_URL, lookup, isPrivate =
       if (!req.url.startsWith(PATH_PREFIX)) {
         res.writeHead(404); res.end('Not found'); return
       }
-      if (!await isAuthenticated(ocUserUrl, req.headers['authorization'])) {
+      if (!await isAuthenticated(req.headers['authorization'])) {
         res.writeHead(401, { 'WWW-Authenticate': 'Bearer' })
         res.end('Unauthorized')
         return
@@ -203,8 +248,10 @@ export function createProxyServer({ ocUserUrl = OC_USER_URL, lookup, isPrivate =
         upstream = await fetchFeed(targetUrl, guards)
         body = await readCapped(upstream)
       } catch (err) {
+        const msg = clientMessage(err)
+        if (msg !== err.message) console.error(`upstream ${targetUrl}: ${err.message}`)
         res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' })
-        res.end('Upstream error: ' + err.message)
+        res.end('Upstream error: ' + msg)
         return
       }
 

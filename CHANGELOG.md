@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- **Feed URLs no longer outlive the login** — the subscription list was cached in `localStorage` per user and never removed, so on a shared machine the next browser user could read Google/Outlook private-feed URLs, which carry their secret in the path. The cache is now dropped on logout (user cleared, or access token cleared while the user store lags). The one exception: a cache holding changes the server never confirmed is kept, so the next login can still merge them
+- **Subscription dialog only accepts http(s)** — the check was `startsWith('http')`, and a Google `?cid=` parameter was taken verbatim, so `javascript:` or `data:` URLs could reach the share dialog's QR code and input. The proxy rejected them anyway; now the dialog does too, with a message
+- **ICS proxy no longer describes its surroundings in error messages** — Node's own text for a failed connection includes the resolved address and port. Upstream failures are now reported in the proxy's own words only; the detail goes to the container log
+- `escapeIcs` treats a bare CR as a line break, like CRLF and LF — a value from a foreign feed can carry one, and some parsers split on it
+
+### Changed
+- **ICS proxy remembers verified tokens for 60 s** — one OCS call per token per minute instead of one per feed per reload. Stored as a hash, positives only; a revoked token is honoured for at most 60 s more, well inside its own lifetime
+- A 502 from the proxy is now explained in the sidebar as "Kalender-Feed nicht erreichbar oder vom Proxy abgelehnt" instead of "Unbekannter Fehler"
+- `source-map-js` pinned to ≥ 1.2.2 (GHSA-68fv-2mgg-jv7q, build-time only) so `pnpm audit` is clean
+- The proxy keeps its own keep-alive connection pools instead of using Node's process-global agent. A pooled socket is reused by host:port without a new lookup, so the pool must contain only sockets that went through the address guard — which is guaranteed for the proxy's own pools and for nothing else
+
 ## [2.10.0] - 2026-10-12
 
 ### Security

@@ -31,7 +31,7 @@
 <script setup lang="ts">
 import { reactive, computed, ref } from 'vue'
 import { useI18n } from '@/composables/useI18n'
-import { canonicalFeedUrl } from '@/utils/subscriptionUrl'
+import { normalizeSubscriptionUrl } from '@/utils/subscriptionUrl'
 
 const { t } = useI18n()
 
@@ -43,30 +43,18 @@ const emit = defineEmits<{
 const form = reactive({ url: '', name: '', color: '#e67e22' })
 const error = ref('')
 
+// Loose on purpose so the button lights up while typing; submit() does the
+// real check and explains a rejection.
 const canSave = computed(() => {
   const u = form.url.trim()
-  return (u.startsWith('http') || u.startsWith('webcal://')) && form.name.trim().length > 0
+  return /^(https?|webcal):\/\//i.test(u) && form.name.trim().length > 0
 })
-
-function normalizeUrl(raw: string): string {
-  let url = raw.trim()
-  if (url.startsWith('webcal://')) url = 'https://' + url.slice('webcal://'.length)
-  try {
-    const cid = new URL(url).searchParams.get('cid')
-    if (cid) url = cid
-  } catch { /* leave as-is */ }
-  // Skip Google's 302 hop: clients that do not follow redirects otherwise
-  // subscribe successfully and then show an empty calendar.
-  return canonicalFeedUrl(url)
-}
 
 function submit() {
   error.value = ''
-  const normalized = normalizeUrl(form.url)
-  try {
-    new URL(normalized)
-  } catch {
-    error.value = 'Please enter a valid URL.'
+  const normalized = normalizeSubscriptionUrl(form.url)
+  if (!normalized) {
+    error.value = t('Please enter a valid http(s) or webcal URL.')
     return
   }
   emit('add', normalized, form.name.trim(), form.color)
