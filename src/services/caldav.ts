@@ -1,5 +1,6 @@
 import ICAL from 'ical.js'
 import { PRODID } from '@/constants'
+import { buildVTimeZone, localCompact, userTimeZone } from '@/utils/timezone'
 
 export interface CalendarEvent {
   uid: string
@@ -88,19 +89,38 @@ export function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): s
     return `${y}${m}${day}`
   }
 
+  // Timed events are written in the device zone together with a VTIMEZONE.
+  // A UTC DTSTART anchors a recurring series to an absolute instant, so the
+  // RRULE (expanded in UTC) drifts by an hour at every DST change: "every
+  // Tuesday at 10:00" quietly becomes 09:00. UTC itself is kept in the plain
+  // Z form, which is unambiguous and has no DST to lose.
+  const zone = event.allDay ? '' : userTimeZone()
+  const usesZone = zone !== '' && zone !== 'UTC'
+
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     `PRODID:${PRODID}`,
+  ]
+  if (usesZone) lines.push(...buildVTimeZone(zone))
+  lines.push(
     'BEGIN:VEVENT',
     // UID is a TEXT value (RFC 5545 §3.8.4.7). Escaping keeps a UID read from
     // foreign ICS data — which may contain a line break — from adding properties.
     `UID:${escapeIcs(event.seriesUid ?? event.uid)}`,
     `DTSTAMP:${fmtUtc(new Date())}`,
-    event.allDay ? `DTSTART;VALUE=DATE:${fmtDate(event.start)}` : `DTSTART:${fmtUtc(event.start)}`,
-    event.allDay ? `DTEND;VALUE=DATE:${fmtDate(event.end)}` : `DTEND:${fmtUtc(event.end)}`,
+    event.allDay
+      ? `DTSTART;VALUE=DATE:${fmtDate(event.start)}`
+      : usesZone
+        ? `DTSTART;TZID=${zone}:${localCompact(zone, event.start.getTime())}`
+        : `DTSTART:${fmtUtc(event.start)}`,
+    event.allDay
+      ? `DTEND;VALUE=DATE:${fmtDate(event.end)}`
+      : usesZone
+        ? `DTEND;TZID=${zone}:${localCompact(zone, event.end.getTime())}`
+        : `DTEND:${fmtUtc(event.end)}`,
     `SUMMARY:${escapeIcs(event.title)}`,
-  ]
+  )
   if (event.description) lines.push(`DESCRIPTION:${escapeIcs(event.description)}`)
   if (event.location) lines.push(`LOCATION:${escapeIcs(event.location)}`)
   const color = safeColor(event.color)
