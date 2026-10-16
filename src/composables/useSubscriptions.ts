@@ -2,6 +2,7 @@ import { ref, watch } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { parseEvents, safeColor, type CalendarEvent } from '@/services/caldav'
 import { SUBSCRIPTIONS_STORAGE_PREFIX, SUBSCRIPTIONS_WEBDAV_DIR } from '@/constants'
+import { useI18n } from '@/composables/useI18n'
 
 export interface IcsSubscription {
   id: string
@@ -178,6 +179,7 @@ export function useSubscriptions(
   onError?: (name: string, message: string, url: string) => void,
   onSyncError?: (message: string) => void,
 ) {
+  const { t } = useI18n()
   const subscriptions = ref<IcsSubscription[]>([])
   const subscriptionEvents = ref<CalendarEvent[]>([])
   const subscriptionErrors = ref<Record<string, string>>({})
@@ -333,7 +335,7 @@ export function useSubscriptions(
             // existed only in this tab until the next load quietly dropped it.
             modifyVersion++
             locallyModified = true
-            onSyncError?.('Abonnement konnte nicht auf dem Server gespeichert werden – lokal gesichert, erneuter Versuch beim nächsten Laden')
+            onSyncError?.(t('Subscription could not be saved on the server - kept locally, retried on the next load'))
           }
         })
       }
@@ -378,18 +380,18 @@ export function useSubscriptions(
       })
       if (!res.ok) {
         const reasons: Record<number, string> = {
-          400: 'Ungültige Anfrage',
-          401: 'Zugriff verweigert (Anmeldung erforderlich)',
-          403: 'Zugriff verweigert',
-          404: 'Kalender nicht gefunden',
-          410: 'Kalender wurde permanent entfernt',
-          429: 'Zu viele Anfragen – bitte später versuchen',
-          500: 'Server-Fehler',
-          502: 'Kalender-Feed nicht erreichbar oder vom Proxy abgelehnt',
-          503: 'Dienst nicht verfügbar',
+          400: t('Invalid request'),
+          401: t('Access denied (sign-in required)'),
+          403: t('Access denied'),
+          404: t('Calendar not found'),
+          410: t('Calendar was permanently removed'),
+          429: t('Too many requests - try again later'),
+          500: t('Server error'),
+          502: t('Calendar feed unreachable or rejected by the proxy'),
+          503: t('Service unavailable'),
         }
-        const reason = reasons[res.status] ?? `Unbekannter Fehler`
-        throw new Error(`HTTP ${res.status} – ${reason}`)
+        const reason = reasons[res.status] ?? t('Unknown error')
+        throw new Error(`HTTP ${res.status} - ${reason}`)
       }
       const icsText = await res.text()
       if (mySession !== session) return  // user switched or logged out while fetching
@@ -402,8 +404,8 @@ export function useSubscriptions(
         const contentType = res.headers?.get?.('content-type') ?? ''
         throw new Error(
           contentType.includes('html')
-            ? 'HTML statt iCal erhalten – ICS-Proxy nicht erreichbar oder nicht konfiguriert'
-            : 'Keine gültige iCal-Datei (BEGIN:VCALENDAR fehlt)',
+            ? t('Received HTML instead of iCal - ICS proxy unreachable or not configured')
+            : t('Not a valid iCal file (BEGIN:VCALENDAR missing)'),
         )
       }
       // parseEvents uses a placeholder href since subscriptions have no CalDAV href

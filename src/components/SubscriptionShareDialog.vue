@@ -18,7 +18,7 @@
       <p class="hint">
         {{ scheme === 'webcal'
           ? t('Opens directly in a calendar app. Switch to https if your scanner ignores the link.')
-          : t('A plain web link — your browser will show the raw calendar file.') }}
+          : t('A plain web link - your browser will show the raw calendar file.') }}
       </p>
 
       <!-- Deliberately black on white in both themes: a QR tinted to match dark
@@ -33,7 +33,7 @@
       </label>
 
       <p v-if="copyState === 'failed'" class="hint warn">
-        {{ t('Copying is unavailable here — select the address and copy it manually.') }}
+        {{ t('Copying is unavailable here - select the address and copy it manually.') }}
       </p>
 
       <div class="dialog-actions">

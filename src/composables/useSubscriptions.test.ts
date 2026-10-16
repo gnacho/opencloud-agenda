@@ -551,14 +551,14 @@ describe('useSubscriptions — feed content validation', () => {
       '<!DOCTYPE html><html lang="en"><head><base href="/"/>', 'text/html; charset=utf-8',
     )
 
-    expect(subscriptionErrors.value['sub-v']).toMatch(/ICS-Proxy nicht erreichbar/)
-    expect(onError).toHaveBeenCalledWith('V', expect.stringMatching(/ICS-Proxy/), 'http://v.ics')
+    expect(subscriptionErrors.value['sub-v']).toMatch(/ICS proxy unreachable/)
+    expect(onError).toHaveBeenCalledWith('V', expect.stringMatching(/ICS proxy/), 'http://v.ics')
   })
 
   it('reports an error for a 200 response that is not iCalendar', async () => {
     const { subscriptionErrors } = await fetchFeed('not a calendar at all', 'text/plain')
 
-    expect(subscriptionErrors.value['sub-v']).toMatch(/BEGIN:VCALENDAR fehlt/)
+    expect(subscriptionErrors.value['sub-v']).toMatch(/BEGIN:VCALENDAR missing/)
   })
 
   it('accepts a valid feed and records no error', async () => {
@@ -643,7 +643,7 @@ describe('useSubscriptions — surviving a failed server write', () => {
     vi.runAllTimers()
     await flush()
 
-    expect(onSyncError).toHaveBeenCalledWith(expect.stringMatching(/nicht auf dem Server gespeichert/))
+    expect(onSyncError).toHaveBeenCalledWith(expect.stringMatching(/could not be saved on the server/))
   })
 
   it('does not resurrect an entry deleted elsewhere once the write was confirmed', async () => {
