@@ -2,21 +2,20 @@ import { computed } from 'vue'
 import { defineWebApplication } from '@opencloud-eu/web-pkg'
 import type { AppMenuItemExtension, Extension } from '@opencloud-eu/web-pkg'
 import { urlJoin } from '@opencloud-eu/web-client'
+import { useGettext } from 'vue3-gettext'
 import { APP_ID } from '@/constants'
 import { registerTokenRevocationOnLogout } from '@/composables/useAuth'
-
-function getAppName(): string {
-  const lang = document.documentElement.lang || navigator.language || ''
-  return lang.toLowerCase().startsWith('de') ? 'Termine' : 'Agenda'
-}
+import translations from '../l10n/translations.json'
 
 export default defineWebApplication({
   setup() {
     registerTokenRevocationOnLogout()
 
+    const { $gettext } = useGettext()
+
     const appInfo = {
       id: APP_ID,
-      name: getAppName(),
+      name: $gettext('Agenda'),
       icon: 'calendar',
     }
 
@@ -50,7 +49,7 @@ export default defineWebApplication({
         {
           id: `app.${appInfo.id}.menuItem`,
           type: 'appMenuItem',
-          label: () => getAppName(),
+          label: () => $gettext('Agenda'),
           icon: appInfo.icon,
           path: urlJoin(appInfo.id),
         },
@@ -61,6 +60,7 @@ export default defineWebApplication({
     return {
       appInfo,
       routes,
+      translations,
       extensions,
     }
   },

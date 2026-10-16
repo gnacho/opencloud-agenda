@@ -80,7 +80,7 @@
       </ul>
 
       <div class="sidebar-footer">
-        <button class="help-link" @click="helpOpen = true">? {{ de ? 'Hilfe' : 'Help' }}</button>
+        <button class="help-link" @click="helpOpen = true">? {{ t('Help') }}</button>
       </div>
     </aside>
 
@@ -152,6 +152,7 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
 import deLocale from '@fullcalendar/core/locales/de'
+import esLocale from '@fullcalendar/core/locales/es'
 import EventDialog from '@/components/EventDialog.vue'
 import CalendarDialog from '@/components/CalendarDialog.vue'
 import SubscriptionDialog from '@/components/SubscriptionDialog.vue'
@@ -161,16 +162,13 @@ import { useCalendar } from '@/composables/useCalendar'
 import { useSubscriptions } from '@/composables/useSubscriptions'
 import type { IcsSubscription } from '@/composables/useSubscriptions'
 import { useAuth } from '@/composables/useAuth'
-import { useI18n } from '@/composables/useI18n'
+import { currentLanguage, useI18n } from '@/composables/useI18n'
 import { useMessages } from '@opencloud-eu/web-pkg'
 import type { CalendarEvent } from '@/services/caldav'
 import { addDays, formatEventRange } from '@/utils/eventFormat'
 import { contrastText, isNearWhite, schemeForBackground } from '@/utils/theme'
 
 const { t, isGerman, localeTag } = useI18n()
-// Computed, not a constant: OpenCloud sets documentElement.lang only after the
-// extension is mounted, so a setup-time read is still empty here.
-const de = computed(() => isGerman())
 const helpOpen = ref(false)
 
 const {
@@ -206,8 +204,8 @@ const {
 } = useSubscriptions(
   () => userId.value,
   () => accessToken.value,
-  (name, msg) => showErrorMessage({ title: `Kalender-Fehler: ${name}`, desc: msg, timeout: 10000 }),
-  (msg) => showErrorMessage({ title: 'Abonnements nicht gespeichert', desc: msg, timeout: 10000 }),
+  (name, msg) => showErrorMessage({ title: t('Calendar error: %{name}', { name }), desc: msg, timeout: 10000 }),
+  (msg) => showErrorMessage({ title: t('Subscriptions could not be saved'), desc: msg, timeout: 10000 }),
 )
 
 // Anything still on its way into the grid — CalDAV calendars or any feed.
@@ -425,9 +423,11 @@ function getInitialView(): string {
   return 'dayGridMonth'
 }
 
-// detect language for FC locale
+// FullCalendar needs its own locale object; only de and es are translated here.
 function getFcLocale() {
-  return isGerman() ? deLocale : 'en'
+  if (isGerman()) return deLocale
+  if (currentLanguage().startsWith('es')) return esLocale
+  return 'en'
 }
 
 // current range being displayed — re-fetch when it changes

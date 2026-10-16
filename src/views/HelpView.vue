@@ -3,118 +3,85 @@
   <div class="help-view">
     <button class="close-btn" @click="$emit('close')">×</button>
     <div class="help-content">
-      <h1>{{ de ? 'Hilfe – Termine' : 'Help – Agenda' }}</h1>
+      <h1>{{ t('Help - Agenda') }}</h1>
 
       <section>
-        <h2>{{ de ? 'Termine erstellen' : 'Creating events' }}</h2>
+        <h2>{{ t('Creating events') }}</h2>
         <ul>
-          <li v-if="de">Klick auf einen Tag → Neuer Termin für diesen Tag (ganztägig)</li>
-          <li v-else>Click on a day → new all-day event for that day</li>
-          <li v-if="de">Klick &amp; Ziehen über mehrere Tage → Mehrtägiger Termin</li>
-          <li v-else>Click &amp; drag across days → multi-day event</li>
-          <li v-if="de">In der Wochen-/Tagesansicht: Klick auf eine Uhrzeit → Termin mit Startzeit</li>
-          <li v-else>In week/day view: click a time slot → timed event at that hour</li>
-          <li v-if="de">„+ Neu"-Button oben links → Termin ohne Vorgabe erstellen</li>
-          <li v-else>"+ New" button top left → create event without preselection</li>
-          <li v-if="de">Im Dialog unter „Wiederholen" lässt sich eine Wiederholungsregel festlegen (täglich, wöchentlich, monatlich, jährlich)</li>
-          <li v-else>Use "Repeat" in the dialog to set a recurrence rule (daily, weekly, monthly, yearly)</li>
+          <li>{{ t('Click on a day → new all-day event for that day') }}</li>
+          <li>{{ t('Click & drag across days → multi-day event') }}</li>
+          <li>{{ t('In week/day view: click a time slot → timed event at that hour') }}</li>
+          <li>{{ t('Button "+ New" top left → create event without preselection') }}</li>
+          <li>{{ t('Use "Repeat" in the dialog to set a recurrence rule (daily, weekly, monthly, yearly)') }}</li>
         </ul>
       </section>
 
       <section>
-        <h2>{{ de ? 'Termine bearbeiten' : 'Editing events' }}</h2>
+        <h2>{{ t('Editing events') }}</h2>
         <ul>
-          <li v-if="de">Klick auf einen Termin → Dialog zum Bearbeiten oder Löschen</li>
-          <li v-else>Click an event → dialog to edit or delete</li>
-          <li v-if="de">Termin ziehen → verschiebt den Termin (Datum/Uhrzeit)</li>
-          <li v-else>Drag an event → move it to a new date/time</li>
-          <li v-if="de">Mehrtägige Termine haben an beiden Enden einen weißen Anfasser zum Vergrößern/Verkleinern</li>
-          <li v-else>Multi-day events have white handles at both edges to extend or shorten them</li>
-          <li v-if="de">In der Wochen-/Tagesansicht: unterer Rand eines Termins ziehen → Dauer ändern</li>
-          <li v-else>In week/day view: drag the bottom edge of a timed event → change duration</li>
-          <li v-if="de">Im Kalender-Dropdown den Kalender wechseln → verschiebt den Termin in einen anderen Kalender</li>
-          <li v-else>Change the calendar in the dropdown → moves the event to a different calendar</li>
+          <li>{{ t('Click an event → dialog to edit or delete') }}</li>
+          <li>{{ t('Drag an event → move it to a new date/time') }}</li>
+          <li>{{ t('Multi-day events have white handles at both edges to extend or shorten them') }}</li>
+          <li>{{ t('In week/day view: drag the bottom edge of a timed event → change duration') }}</li>
+          <li>{{ t('Change the calendar in the dropdown → moves the event to a different calendar') }}</li>
         </ul>
       </section>
 
       <section>
-        <h2>{{ de ? 'Wiederkehrende Termine' : 'Recurring events' }}</h2>
+        <h2>{{ t('Recurring events') }}</h2>
         <ul>
-          <li v-if="de">Wiederkehrende Termine sind im Kalender mit <strong>↻</strong> markiert</li>
-          <li v-else>Recurring events are marked with <strong>↻</strong> in the calendar</li>
-          <li v-if="de">Wiederholungsoptionen: täglich · wöchentlich (Wochentage wählbar) · monatlich (am Tag X oder am N-ten Wochentag) · jährlich</li>
-          <li v-else>Repeat options: daily · weekly (choose weekdays) · monthly (on day X or the Nth weekday) · yearly</li>
-          <li v-if="de">Mit „Alle N …" lässt sich ein Intervall festlegen, z.&nbsp;B. alle 2 Wochen (14-tägig)</li>
-          <li v-else>Use "Every N …" to set an interval, e.g. every 2 weeks (biweekly)</li>
-          <li v-if="de">Ende der Serie: nie · nach N Terminen · bis zu einem Datum</li>
-          <li v-else>Series end: never · after N occurrences · until a date</li>
-          <li v-if="de">Beim Bearbeiten oder Verschieben eines Serientermins wird immer die <em>gesamte Serie</em> aktualisiert</li>
-          <li v-else>Editing or moving a recurring event always updates the <em>entire series</em></li>
-          <li v-if="de">Termine aus Thunderbird oder anderen CalDAV-Clients werden korrekt als Serie angezeigt und können hier bearbeitet werden</li>
-          <li v-else>Events from Thunderbird or other CalDAV clients are correctly shown as a series and can be edited here</li>
+          <li>{{ t('Recurring events are marked with ↻ in the calendar') }}</li>
+          <li>{{ t('Repeat options: daily · weekly (choose weekdays) · monthly (on day X or the Nth weekday) · yearly') }}</li>
+          <li>{{ t('Use "Every N …" to set an interval, e.g. every 2 weeks (biweekly)') }}</li>
+          <li>{{ t('Series end: never · after N occurrences · until a date') }}</li>
+          <li>{{ t('Editing or moving a recurring event always updates the entire series') }}</li>
+          <li>{{ t('Events from Thunderbird or other CalDAV clients are correctly shown as a series and can be edited here') }}</li>
         </ul>
       </section>
 
       <section>
-        <h2>{{ de ? 'Kalender verwalten' : 'Managing calendars' }}</h2>
+        <h2>{{ t('Managing calendars') }}</h2>
         <ul>
-          <li v-if="de">Haken in der Sidebar → Kalender ein-/ausblenden</li>
-          <li v-else>Checkbox in the sidebar → show/hide a calendar</li>
-          <li v-if="de">Klick auf einen Kalendernamen → wählt ihn als Standard für neue Termine</li>
-          <li v-else>Click a calendar name → sets it as default for new events</li>
-          <li v-if="de">Doppelklick auf einen Kalendernamen → umbenennen</li>
-          <li v-else>Double-click a calendar name → rename it</li>
-          <li v-if="de">„+"-Button neben „Kalender" → neuen Kalender anlegen (Name + Farbe)</li>
-          <li v-else>"+" button next to "Calendars" → create a new calendar (name + color)</li>
-          <li v-if="de">↻-Button in der Sidebar → Daten manuell vom Server laden (z. B. nach Sync mit Thunderbird)</li>
-          <li v-else>↻ button in the sidebar → manually refresh data from the server (e.g. after syncing with Thunderbird)</li>
+          <li>{{ t('Checkbox in the sidebar → show/hide a calendar') }}</li>
+          <li>{{ t('Click a calendar name → sets it as default for new events') }}</li>
+          <li>{{ t('Double-click a calendar name → rename it') }}</li>
+          <li>{{ t('Button "+" next to "Calendars" → create a new calendar (name + color)') }}</li>
+          <li>{{ t('↻ button in the sidebar → manually refresh data from the server (e.g. after syncing with Thunderbird)') }}</li>
         </ul>
       </section>
 
       <section>
-        <h2>{{ de ? 'Ansichten' : 'Views' }}</h2>
+        <h2>{{ t('Views') }}</h2>
         <ul>
-          <li v-if="de"><strong>Monat</strong> – Übersicht des gesamten Monats</li>
-          <li v-else><strong>Month</strong> – overview of the full month</li>
-          <li v-if="de"><strong>Woche</strong> – Stundengenaue Wochenansicht mit Zeitraster</li>
-          <li v-else><strong>Week</strong> – hourly week view with time grid</li>
-          <li v-if="de"><strong>Tag</strong> – Detailansicht eines einzelnen Tages</li>
-          <li v-else><strong>Day</strong> – detailed view of a single day</li>
-          <li v-if="de"><strong>Liste</strong> – Alle kommenden Termine als Liste</li>
-          <li v-else><strong>List</strong> – all upcoming events as a list</li>
+          <li><strong>{{ t('Month') }}</strong> - {{ t('overview of the full month') }}</li>
+          <li><strong>{{ t('Week') }}</strong> - {{ t('hourly week view with time grid') }}</li>
+          <li><strong>{{ t('Day') }}</strong> - {{ t('detailed view of a single day') }}</li>
+          <li><strong>{{ t('List') }}</strong> - {{ t('all upcoming events as a list') }}</li>
         </ul>
       </section>
 
       <section>
-        <h2>{{ de ? 'Abonnements (externe Kalender)' : 'Subscriptions (external calendars)' }}</h2>
+        <h2>{{ t('Subscriptions (external calendars)') }}</h2>
         <ul>
-          <li v-if="de">„+"-Button neben „Abonnements" → externe iCal-URL (.ics) als Nur-Lese-Kalender einbinden</li>
-          <li v-else>"+" button next to "Subscriptions" → add an external iCal URL (.ics) as a read-only calendar</li>
-          <li v-if="de">Name, URL und Farbe frei wählbar (z. B. Feiertage, Teamkalender)</li>
-          <li v-else>Choose name, URL and color freely (e.g. public holidays, team calendars)</li>
-          <li v-if="de">Haken → Abonnement ein-/ausblenden; × beim Hover → Abonnement löschen</li>
-          <li v-else>Checkbox → show/hide subscription; × on hover → remove subscription</li>
-          <li v-if="de">Abonnierte Termine sind schreibgeschützt – kein Dialog beim Klick, kein Verschieben</li>
-          <li v-else>Subscribed events are read-only — no dialog on click, no drag &amp; drop</li>
-          <li v-if="de">↻-Button lädt alle Abonnements neu</li>
-          <li v-else>↻ button reloads all subscriptions</li>
+          <li>{{ t('Button "+" next to "Subscriptions" → add an external iCal URL (.ics) as a read-only calendar') }}</li>
+          <li>{{ t('Choose name, URL and color freely (e.g. public holidays, team calendars)') }}</li>
+          <li>{{ t('Checkbox → show/hide subscription; × on hover → remove subscription') }}</li>
+          <li>{{ t('Subscribed events are read-only - no dialog on click, no drag and drop') }}</li>
+          <li>{{ t('↻ button reloads all subscriptions') }}</li>
         </ul>
       </section>
 
       <section>
-        <h2>{{ de ? 'Hinweise' : 'Notes' }}</h2>
+        <h2>{{ t('Notes') }}</h2>
         <ul>
-          <li v-if="de">Ganztägige Termine: das Enddatum im Dialog ist <em>inklusive</em> — „Ende: 21.04" heißt der Termin läuft bis einschließlich 21.04.</li>
-          <li v-else>All-day events: the end date in the dialog is <em>inclusive</em> — "End: Apr 21" means the event runs through Apr 21.</li>
-          <li v-if="de">Daten werden direkt im CalDAV-Server (Radicale) gespeichert und sind sofort in anderen Clients (Thunderbird, Smartphone) sichtbar.</li>
-          <li v-else>Data is stored directly on the CalDAV server (Radicale) and immediately visible in other clients (Thunderbird, phone).</li>
-          <li v-if="de">Das Verschieben von Serienterminen zwischen Kalendern wird nicht unterstützt.</li>
-          <li v-else>Moving recurring events between calendars is not supported.</li>
+          <li>{{ t('All-day events: the end date in the dialog is inclusive - "End: Apr 21" means the event runs through Apr 21.') }}</li>
+          <li>{{ t('Data is stored directly on the CalDAV server (Radicale) and immediately visible in other clients (Thunderbird, phone).') }}</li>
+          <li>{{ t('Moving recurring events between calendars is not supported.') }}</li>
         </ul>
       </section>
 
       <footer class="help-footer">
-        © 2026 <a href="https://www.linux-nerds.org" target="_blank" rel="noopener">linux-nerds.org</a> · Agenda v{{ version }}
+        © 2026 <a href="https://www.linux-nerds.org" target="_blank" rel="noopener">linux-nerds.org</a> · {{ t('Agenda') }} v{{ version }}
       </footer>
     </div>
   </div>
@@ -122,8 +89,12 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from '@/composables/useI18n'
+
 defineEmits<{ (e: 'close'): void }>()
-const de = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('de')
+
+const { t } = useI18n()
+
 declare const __APP_VERSION__: string
 const version = __APP_VERSION__
 </script>
