@@ -233,6 +233,64 @@ DTSTAMP:20260101T000000Z
     const events = parseEvents(ics, href)
     expect(events[0].title).toBe('(no title)')
   })
+
+  // A client that edits one occurrence of a series (Thunderbird, DAVx5, iOS)
+  // writes a second VEVENT with RECURRENCE-ID. It must be applied by the series
+  // iterator, not rendered as an extra event, and the occurrence must take the
+  // fields of the edited copy.
+  describe('RECURRENCE-ID overrides', () => {
+    const seriesWithOverride = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//test//EN',
+      'BEGIN:VEVENT',
+      'UID:override-001',
+      'SUMMARY:Weekly Standup',
+      'DESCRIPTION:Series notes',
+      'LOCATION:Room A',
+      'DTSTART:20260406T090000Z',
+      'DTEND:20260406T093000Z',
+      'DTSTAMP:20260101T000000Z',
+      'RRULE:FREQ=WEEKLY;COUNT=4;BYDAY=MO',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:override-001',
+      'SUMMARY:Standup (moved)',
+      'DESCRIPTION:Moved notes',
+      'LOCATION:Room B',
+      'RECURRENCE-ID:20260420T090000Z',
+      'DTSTART:20260420T130000Z',
+      'DTEND:20260420T133000Z',
+      'DTSTAMP:20260101T000000Z',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n') + '\r\n'
+
+    it('renders the edited occurrence once, not twice', () => {
+      const events = parseEvents(seriesWithOverride, href)
+      expect(events).toHaveLength(4)
+      const onEditedDay = events.filter(e => e.start.toISOString().startsWith('2026-04-20'))
+      expect(onEditedDay).toHaveLength(1)
+      expect(onEditedDay[0].start.toISOString()).toBe('2026-04-20T13:00:00.000Z')
+    })
+
+    it('takes title, description and location from the override', () => {
+      const events = parseEvents(seriesWithOverride, href)
+      const edited = events.find(e => e.start.toISOString() === '2026-04-20T13:00:00.000Z')
+      expect(edited?.title).toBe('Standup (moved)')
+      expect(edited?.description).toBe('Moved notes')
+      expect(edited?.location).toBe('Room B')
+    })
+
+    it('keeps the master fields on the untouched occurrences', () => {
+      const events = parseEvents(seriesWithOverride, href)
+      const untouched = events.filter(e => e.start.toISOString() !== '2026-04-20T13:00:00.000Z')
+      expect(untouched).toHaveLength(3)
+      expect(untouched.every(e => e.title === 'Weekly Standup')).toBe(true)
+      expect(untouched.every(e => e.location === 'Room A')).toBe(true)
+      expect(untouched.every(e => e.seriesUid === 'override-001')).toBe(true)
+    })
+  })
 })
 
 describe('safeColor', () => {
