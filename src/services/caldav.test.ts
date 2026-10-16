@@ -75,10 +75,22 @@ describe('buildIcs', () => {
     expect(lines).toContain('UID:test-uid-123')
   })
 
-  it('includes UTC DTSTART and DTEND for timed event', () => {
+  it('writes timed events in the device zone with a matching VTIMEZONE', () => {
     const lines = icsLines(buildIcs(baseEvent)!)
-    expect(lines).toContain('DTSTART:20260406T090000Z')
-    expect(lines).toContain('DTEND:20260406T100000Z')
+    // TZ is pinned to Europe/Berlin in vitest.config.ts, so 09:00Z is 11:00 local.
+    expect(lines).toContain('DTSTART;TZID=Europe/Berlin:20260406T110000')
+    expect(lines).toContain('DTEND;TZID=Europe/Berlin:20260406T120000')
+    expect(lines).toContain('BEGIN:VTIMEZONE')
+    expect(lines).toContain('TZID:Europe/Berlin')
+    expect(lines).toContain('END:VTIMEZONE')
+    // The definition has to come before the event that refers to it.
+    expect(lines.indexOf('BEGIN:VTIMEZONE')).toBeLessThan(lines.indexOf('BEGIN:VEVENT'))
+  })
+
+  it('does not add a VTIMEZONE to an all-day event', () => {
+    const ev = { ...baseEvent, allDay: true }
+    const lines = icsLines(buildIcs(ev)!)
+    expect(lines.some(l => l.startsWith('BEGIN:VTIMEZONE'))).toBe(false)
   })
 
   it('uses DATE format for all-day event', () => {
@@ -223,6 +235,32 @@ RRULE:FREQ=DAILY;COUNT=4
     expect(uids.every(u => u.startsWith('recur-002_'))).toBe(true)
   })
 
+  // The regression the TZID change is about: a series written by this app has
+  // to keep its wall-clock time when the offset changes.
+  it('keeps a recurring series at the same local time across the DST change', () => {
+    const ics = buildIcs({
+      uid: 'series-dst',
+      title: 'Weekly',
+      // 10:00 local (TZ is Europe/Berlin), four Tuesdays from 20 October 2026.
+      start: new Date('2026-10-20T10:00:00'),
+      end: new Date('2026-10-20T11:00:00'),
+      allDay: false,
+      rrule: 'FREQ=WEEKLY;BYDAY=TU;COUNT=4',
+    })!
+    expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20261020T100000')
+
+    const events = parseEvents(ics, href)
+    expect(events).toHaveLength(4)
+
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    })
+    expect(events.map(e => fmt.format(e.start))).toEqual(['10:00', '10:00', '10:00', '10:00'])
+    // The two sides of the switch really are different offsets, so the test
+    // would catch a definition that simply froze one of them.
+    expect(new Set(events.map(e => e.start.toISOString().slice(11, 16))).size).toBe(2)
+  })
+
   it('returns (no title) when SUMMARY is missing', () => {
     const ics = makeIcs(`
 UID:notitle-001
@@ -296,7 +334,10 @@ describe('buildIcs — values from foreign ICS data', () => {
 
   it('drops an RRULE carrying a line break', () => {
     const out = lines(buildIcs({ ...ev, rrule: 'FREQ=DAILY\r\nATTACH:x' }))
-    expect(out.some(l => l.startsWith('RRULE') || l.startsWith('ATTACH'))).toBe(false)
+    // Only the VEVENT is relevant here: a VTIMEZONE has RRULEs of its own.
+    const vevent = out.slice(out.indexOf('BEGIN:VEVENT'), out.indexOf('END:VEVENT'))
+    expect(vevent.some(l => l.startsWith('RRULE'))).toBe(false)
+    expect(out.some(l => l.startsWith('ATTACH'))).toBe(false)
   })
 })
 
