@@ -240,6 +240,7 @@ function buildRrule(): string | undefined {
     count: form.repeatCount,
     until: form.repeatUntil,
     startDate: startDateForCalc.value,
+    allDay: form.allDay,
   })
 }
 

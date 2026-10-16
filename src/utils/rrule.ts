@@ -51,6 +51,7 @@ export interface BuildRruleParams {
   count: number
   until: string // YYYY-MM-DD or ''
   startDate: Date
+  allDay?: boolean
 }
 
 export function buildRrule(params: BuildRruleParams): string | undefined {
@@ -69,7 +70,27 @@ export function buildRrule(params: BuildRruleParams): string | undefined {
   if (params.endType === 'COUNT' && params.count > 0) {
     rule += `;COUNT=${params.count}`
   } else if (params.endType === 'UNTIL' && params.until) {
-    rule += `;UNTIL=${params.until.replace(/-/g, '')}T235959Z`
+    rule += `;UNTIL=${buildUntil(params.until, params.allDay ?? false)}`
   }
   return rule
+}
+
+/**
+ * RFC 5545 requires UNTIL to have the same value type as DTSTART: a DATE for
+ * all-day events, a UTC timestamp for timed ones.
+ *
+ * Timed: end the series at local midnight of the day after the selected date,
+ * minus one second, converted to UTC. Writing T235959Z instead used to end the
+ * series after local midnight for positive offsets, so a daily 01:00 series
+ * "until 20 October" also showed 21 October. The Date constructor is used with
+ * wall-time components on purpose: adding milliseconds would drift one hour
+ * across a DST transition.
+ */
+function buildUntil(until: string, allDay: boolean): string {
+  const day = until.replace(/-/g, '')
+  if (allDay) return day
+  const [y, m, d] = until.split('-').map(Number)
+  const end = new Date(y, m - 1, d + 1, 0, 0, 0)
+  end.setTime(end.getTime() - 1000)
+  return end.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
 }

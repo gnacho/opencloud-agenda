@@ -115,9 +115,25 @@ describe('buildRrule', () => {
     expect(r).toBe('FREQ=DAILY;COUNT=7')
   })
 
-  it('appends UNTIL as end-of-day so last occurrence is not cut off', () => {
+  it('appends UNTIL as end-of-local-day so the last occurrence is not cut off', () => {
+    // TZ is Europe/Berlin (CET, +1): local midnight of 2027-01-01 minus 1s
+    // is 2026-12-31T22:59:59Z.
     const r = buildRrule({ freq: 'WEEKLY', days: ['TU'], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'UNTIL', count: 10, until: '2026-12-31', startDate: monday })
-    expect(r).toBe('FREQ=WEEKLY;BYDAY=TU;UNTIL=20261231T235959Z')
+    expect(r).toBe('FREQ=WEEKLY;BYDAY=TU;UNTIL=20261231T225959Z')
+  })
+
+  it('writes UNTIL in local midnight-minus-1s, not UTC 23:59:59 (early-morning series)', () => {
+    // Regression for the extra-day bug: with UNTIL=20261020T235959Z, a daily
+    // 01:00 CEST occurrence on Oct 21 (= Oct 20 23:00Z) still fits inside the
+    // range, so the series showed one day too many. Ending at local midnight
+    // minus 1s (CEST, +2 -> 20261020T215959Z) excludes it.
+    const r = buildRrule({ freq: 'DAILY', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'UNTIL', count: 10, until: '2026-10-20', startDate: monday })
+    expect(r).toBe('FREQ=DAILY;UNTIL=20261020T215959Z')
+  })
+
+  it('writes UNTIL as a DATE for all-day events, matching the RFC and DTSTART', () => {
+    const r = buildRrule({ freq: 'DAILY', days: [], monthlyType: 'DAYOFMONTH', monthlyByday: '', endType: 'UNTIL', count: 10, until: '2026-10-20', startDate: monday, allDay: true })
+    expect(r).toBe('FREQ=DAILY;UNTIL=20261020')
   })
 
   it('preserves existing monthlyByday (-1MO) instead of recalculating from startDate', () => {
