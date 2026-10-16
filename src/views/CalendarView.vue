@@ -133,6 +133,7 @@
       :defaultAllDay="pendingAllDay ?? undefined"
       :calendars="calendars"
       :activeCalendarHref="activeCalendarHref"
+      :saving="saving"
       @save="handleCreate"
       @update="handleUpdate"
       @delete="handleDelete"
@@ -241,16 +242,22 @@ async function commitRename(href: string) {
 const calendarDialogOpen = ref(false)
 
 async function handleCreateCalendar(name: string, color: string) {
-  calendarDialogOpen.value = false
+  // Same rule as the event dialog: close on success, not before the request.
+  saving.value = true
   try {
     await createCalendar(name, color)
+    calendarDialogOpen.value = false
   } catch (e: unknown) {
     alert(e instanceof Error ? e.message : String(e))
+  } finally {
+    saving.value = false
   }
 }
 
 // --- event dialog state ---
 const dialogOpen = ref(false)
+// True while the parent request runs: keeps the dialog open and blocks a double submit.
+const saving = ref(false)
 const editingEvent = ref<CalendarEvent | null>(null)
 const pendingStart = ref<Date | null>(null)
 const pendingEnd = ref<Date | null>(null)
@@ -533,45 +540,59 @@ const calendarOptions = computed<CalendarOptions>(() => ({
 }))
 
 // --- handlers ---
+// The dialog stays open until the server confirms: closing it before the await
+// discarded what the user had typed whenever the request failed.
 async function handleCreate(
   partial: Omit<CalendarEvent, 'uid' | 'calendarHref' | 'etag'> & { calendarHref: string },
 ) {
-  dialogOpen.value = false
+  saving.value = true
   try {
     await createEvent(partial, partial.calendarHref)
+    dialogOpen.value = false
     if (partial.rrule) {
       // Optimistic update only adds one object — reload to get all expanded occurrences
       loadEvents(currentRange.start, currentRange.end)
     }
   } catch (e: unknown) {
     alert(e instanceof Error ? e.message : String(e))
+  } finally {
+    saving.value = false
   }
 }
 
 async function handleUpdate(event: CalendarEvent) {
-  dialogOpen.value = false
+  saving.value = true
   try {
     await updateEvent(event)
+    dialogOpen.value = false
   } catch (e: unknown) {
     alert(e instanceof Error ? e.message : String(e))
+  } finally {
+    saving.value = false
   }
 }
 
 async function handleDelete(event: CalendarEvent) {
-  dialogOpen.value = false
+  saving.value = true
   try {
     await deleteEvent(event)
+    dialogOpen.value = false
   } catch (e: unknown) {
     alert(e instanceof Error ? e.message : String(e))
+  } finally {
+    saving.value = false
   }
 }
 
 async function handleDeleteOccurrence(event: CalendarEvent) {
-  dialogOpen.value = false
+  saving.value = true
   try {
     await deleteOccurrence(event)
+    dialogOpen.value = false
   } catch (e: unknown) {
     alert(e instanceof Error ? e.message : String(e))
+  } finally {
+    saving.value = false
   }
 }
 

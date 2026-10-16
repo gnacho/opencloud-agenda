@@ -75,10 +75,22 @@ describe('buildIcs', () => {
     expect(lines).toContain('UID:test-uid-123')
   })
 
-  it('includes UTC DTSTART and DTEND for timed event', () => {
+  it('writes timed events in the device zone with a matching VTIMEZONE', () => {
     const lines = icsLines(buildIcs(baseEvent)!)
-    expect(lines).toContain('DTSTART:20260406T090000Z')
-    expect(lines).toContain('DTEND:20260406T100000Z')
+    // TZ is pinned to Europe/Berlin in vitest.config.ts, so 09:00Z is 11:00 local.
+    expect(lines).toContain('DTSTART;TZID=Europe/Berlin:20260406T110000')
+    expect(lines).toContain('DTEND;TZID=Europe/Berlin:20260406T120000')
+    expect(lines).toContain('BEGIN:VTIMEZONE')
+    expect(lines).toContain('TZID:Europe/Berlin')
+    expect(lines).toContain('END:VTIMEZONE')
+    // The definition has to come before the event that refers to it.
+    expect(lines.indexOf('BEGIN:VTIMEZONE')).toBeLessThan(lines.indexOf('BEGIN:VEVENT'))
+  })
+
+  it('does not add a VTIMEZONE to an all-day event', () => {
+    const ev = { ...baseEvent, allDay: true }
+    const lines = icsLines(buildIcs(ev)!)
+    expect(lines.some(l => l.startsWith('BEGIN:VTIMEZONE'))).toBe(false)
   })
 
   it('uses DATE format for all-day event', () => {
@@ -223,6 +235,32 @@ RRULE:FREQ=DAILY;COUNT=4
     expect(uids.every(u => u.startsWith('recur-002_'))).toBe(true)
   })
 
+  // The regression the TZID change is about: a series written by this app has
+  // to keep its wall-clock time when the offset changes.
+  it('keeps a recurring series at the same local time across the DST change', () => {
+    const ics = buildIcs({
+      uid: 'series-dst',
+      title: 'Weekly',
+      // 10:00 local (TZ is Europe/Berlin), four Tuesdays from 20 October 2026.
+      start: new Date('2026-10-20T10:00:00'),
+      end: new Date('2026-10-20T11:00:00'),
+      allDay: false,
+      rrule: 'FREQ=WEEKLY;BYDAY=TU;COUNT=4',
+    })!
+    expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20261020T100000')
+
+    const events = parseEvents(ics, href)
+    expect(events).toHaveLength(4)
+
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    })
+    expect(events.map(e => fmt.format(e.start))).toEqual(['10:00', '10:00', '10:00', '10:00'])
+    // The two sides of the switch really are different offsets, so the test
+    // would catch a definition that simply froze one of them.
+    expect(new Set(events.map(e => e.start.toISOString().slice(11, 16))).size).toBe(2)
+  })
+
   it('returns (no title) when SUMMARY is missing', () => {
     const ics = makeIcs(`
 UID:notitle-001
@@ -232,6 +270,64 @@ DTSTAMP:20260101T000000Z
     `)
     const events = parseEvents(ics, href)
     expect(events[0].title).toBe('(no title)')
+  })
+
+  // A client that edits one occurrence of a series (Thunderbird, DAVx5, iOS)
+  // writes a second VEVENT with RECURRENCE-ID. It must be applied by the series
+  // iterator, not rendered as an extra event, and the occurrence must take the
+  // fields of the edited copy.
+  describe('RECURRENCE-ID overrides', () => {
+    const seriesWithOverride = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//test//EN',
+      'BEGIN:VEVENT',
+      'UID:override-001',
+      'SUMMARY:Weekly Standup',
+      'DESCRIPTION:Series notes',
+      'LOCATION:Room A',
+      'DTSTART:20260406T090000Z',
+      'DTEND:20260406T093000Z',
+      'DTSTAMP:20260101T000000Z',
+      'RRULE:FREQ=WEEKLY;COUNT=4;BYDAY=MO',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:override-001',
+      'SUMMARY:Standup (moved)',
+      'DESCRIPTION:Moved notes',
+      'LOCATION:Room B',
+      'RECURRENCE-ID:20260420T090000Z',
+      'DTSTART:20260420T130000Z',
+      'DTEND:20260420T133000Z',
+      'DTSTAMP:20260101T000000Z',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n') + '\r\n'
+
+    it('renders the edited occurrence once, not twice', () => {
+      const events = parseEvents(seriesWithOverride, href)
+      expect(events).toHaveLength(4)
+      const onEditedDay = events.filter(e => e.start.toISOString().startsWith('2026-04-20'))
+      expect(onEditedDay).toHaveLength(1)
+      expect(onEditedDay[0].start.toISOString()).toBe('2026-04-20T13:00:00.000Z')
+    })
+
+    it('takes title, description and location from the override', () => {
+      const events = parseEvents(seriesWithOverride, href)
+      const edited = events.find(e => e.start.toISOString() === '2026-04-20T13:00:00.000Z')
+      expect(edited?.title).toBe('Standup (moved)')
+      expect(edited?.description).toBe('Moved notes')
+      expect(edited?.location).toBe('Room B')
+    })
+
+    it('keeps the master fields on the untouched occurrences', () => {
+      const events = parseEvents(seriesWithOverride, href)
+      const untouched = events.filter(e => e.start.toISOString() !== '2026-04-20T13:00:00.000Z')
+      expect(untouched).toHaveLength(3)
+      expect(untouched.every(e => e.title === 'Weekly Standup')).toBe(true)
+      expect(untouched.every(e => e.location === 'Room A')).toBe(true)
+      expect(untouched.every(e => e.seriesUid === 'override-001')).toBe(true)
+    })
   })
 })
 
@@ -296,7 +392,10 @@ describe('buildIcs — values from foreign ICS data', () => {
 
   it('drops an RRULE carrying a line break', () => {
     const out = lines(buildIcs({ ...ev, rrule: 'FREQ=DAILY\r\nATTACH:x' }))
-    expect(out.some(l => l.startsWith('RRULE') || l.startsWith('ATTACH'))).toBe(false)
+    // Only the VEVENT is relevant here: a VTIMEZONE has RRULEs of its own.
+    const vevent = out.slice(out.indexOf('BEGIN:VEVENT'), out.indexOf('END:VEVENT'))
+    expect(vevent.some(l => l.startsWith('RRULE'))).toBe(false)
+    expect(out.some(l => l.startsWith('ATTACH'))).toBe(false)
   })
 })
 
