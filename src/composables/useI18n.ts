@@ -29,6 +29,8 @@ const translations: Record<string, string> = {
   'Delete': 'Löschen',
   'Cancel': 'Abbrechen',
   'Save': 'Speichern',
+  'Saving…': 'Speichern…',
+  'Please enter a valid date and time.': 'Bitte ein gültiges Datum und eine gültige Uhrzeit eingeben.',
   // CalendarDialog
   'New Calendar': 'Neuer Kalender',
   'Calendar Name': 'Kalendername',
