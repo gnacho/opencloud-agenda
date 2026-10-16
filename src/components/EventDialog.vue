@@ -101,12 +101,12 @@
 
       <div class="actions">
         <template v-if="!isNew">
-          <button v-if="event?.seriesUid" class="danger" @click="handleDeleteOccurrence">{{ t('Delete occurrence') }}</button>
-          <button class="danger" @click="handleDelete">{{ event?.seriesUid ? t('Delete series') : t('Delete') }}</button>
+          <button v-if="event?.seriesUid" class="danger" :disabled="saving" @click="handleDeleteOccurrence">{{ t('Delete occurrence') }}</button>
+          <button class="danger" :disabled="saving" @click="handleDelete">{{ event?.seriesUid ? t('Delete series') : t('Delete') }}</button>
         </template>
         <span class="spacer" />
-        <button @click="$emit('close')">{{ t('Cancel') }}</button>
-        <button class="primary" @click="handleSave">{{ t('Save') }}</button>
+        <button :disabled="saving" @click="$emit('close')">{{ t('Cancel') }}</button>
+        <button class="primary" :disabled="saving" @click="handleSave">{{ saving ? t('Saving…') : t('Save') }}</button>
       </div>
 
       <p v-if="saveError" class="error-msg">{{ saveError }}</p>
@@ -123,6 +123,7 @@ import { useI18n } from '@/composables/useI18n'
 import { DAY_NAMES, getNthWeekday, parseRrule, buildRrule as buildRruleUtil } from '@/utils/rrule'
 import type { RepeatFreq, RepeatEnd } from '@/utils/rrule'
 import { addDays } from '@/utils/eventFormat'
+import { parseFormDates, validateFormDates } from '@/utils/eventForm'
 
 const { t } = useI18n()
 
@@ -133,6 +134,8 @@ const props = defineProps<{
   defaultAllDay?: boolean
   calendars: Calendar[]
   activeCalendarHref?: string | null
+  /** Parent request in flight: keeps the dialog open and blocks a double submit. */
+  saving?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -241,24 +244,17 @@ function buildRrule(): string | undefined {
 }
 
 function parseDates() {
-  if (form.allDay) {
-    const start = new Date(form.startDate + 'T00:00:00')
-    // Dialog shows inclusive end → add 1 day to make it exclusive (iCal/FC convention)
-    const end = new Date(form.endDate + 'T00:00:00')
-    end.setDate(end.getDate() + 1)
-    return { start, end }
-  }
-  return {
-    start: new Date(form.startDateTime),
-    end: new Date(form.endDateTime),
-  }
+  return parseFormDates(form)
 }
 
 function handleSave() {
   saveError.value = null
   if (!form.title.trim()) { saveError.value = t('Title is required.'); return }
   const { start, end } = parseDates()
-  if (end < start) { saveError.value = t('End must be after start.'); return }
+  // Checks validity, not just the order: an empty field yields an Invalid Date,
+  // which compares false against everything and used to reach the ICS builder.
+  const dateError = validateFormDates(start, end)
+  if (dateError) { saveError.value = t(dateError); return }
   if (!form.calendarHref) { saveError.value = t('Please select a calendar.'); return }
 
   if (isNew.value) {
