@@ -151,6 +151,11 @@ export function parseEvents(
   for (const vevent of vevents) {
     if (budget.results <= 0) break
     try {
+      // A VEVENT carrying RECURRENCE-ID is an exception of a series, not an
+      // event of its own: the series iterator applies it (ical.js relates the
+      // exceptions of a component automatically). Rendering it here as well
+      // would show the same occurrence twice, once with the master's fields.
+      if (vevent.getFirstPropertyValue('recurrence-id')) continue
       const ev = new ICAL.Event(vevent)
       const color = safeColor(vevent.getFirstPropertyValue('color'))
 
@@ -178,16 +183,20 @@ export function parseEvents(
           budget.results--
           const occurrence = ev.getOccurrenceDetails(next)
           const allDay = occurrence.startDate.isDate
+          // An edited occurrence keeps its own SUMMARY, DESCRIPTION and
+          // LOCATION, so read them from the occurrence details rather than
+          // from the series master.
+          const item = occurrence.item ?? ev
           results.push({
             uid: `${ev.uid}_${next.toUnixTime()}`,
             seriesUid: ev.uid,
-            title: ev.summary || '(no title)',
+            title: item.summary || '(no title)',
             start: occurrence.startDate.toJSDate(),
             end: occurrence.endDate.toJSDate(),
             allDay,
-            description: ev.description || undefined,
-            location: ev.location || undefined,
-            color,
+            description: item.description || undefined,
+            location: item.location || undefined,
+            color: safeColor(item.component.getFirstPropertyValue('color')) ?? color,
             rrule: rruleStr,
             calendarHref,
             etag,
