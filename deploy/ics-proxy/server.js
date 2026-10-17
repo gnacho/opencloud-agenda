@@ -122,16 +122,35 @@ function askOpenCloud(ocUserUrl, authHeader) {
 // usable token. An OpenCloud access token lives for minutes to hours, so a
 // revoked one being honoured for up to 60 s more is within its own lifetime.
 function makeAuthenticator(ocUserUrl) {
-  const verified = new Map()   // sha256(header) → expiry (ms)
+  const verified = new Map()   // sha256(header) → expiry (ms), kept in LRU order
+
+  // clear() would send a stampede of OCS re-validations to OpenCloud: purge
+  // expired entries first, then drop only the least recently used one.
+  function makeRoom(now) {
+    for (const [k, until] of verified) {
+      if (until <= now) verified.delete(k)
+    }
+    while (verified.size >= AUTH_CACHE_MAX) {
+      verified.delete(verified.keys().next().value)
+    }
+  }
+
   return async function isAuthenticated(authHeader) {
     if (!authHeader) return false
     const key = createHash('sha256').update(authHeader).digest('hex')
     const now = Date.now()
     const until = verified.get(key)
-    if (until && until > now) return true
+    if (until && until > now) {
+      // Touch: Map iterates in insertion order, so re-inserting moves the
+      // entry to the back and keeps frequently used tokens cached.
+      verified.delete(key)
+      verified.set(key, until)
+      return true
+    }
     if (!await askOpenCloud(ocUserUrl, authHeader)) return false
     if (AUTH_CACHE_MS > 0) {
-      if (verified.size >= AUTH_CACHE_MAX) verified.clear()
+      if (verified.size >= AUTH_CACHE_MAX) makeRoom(now)
+      verified.delete(key)
       verified.set(key, now + AUTH_CACHE_MS)
     }
     return true
@@ -170,7 +189,16 @@ async function fetchFeed(startUrl, guards) {
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const res = await requestOnce(url, guards)
     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-      url = new URL(res.headers.location, url)
+      // A malformed Location must go through the upstream error path (502),
+      // not crash into the general handler as an internal error (500).
+      let next
+      try {
+        next = new URL(res.headers.location, url)
+      } catch {
+        res.resume()
+        throw new UpstreamError('upstream sent an invalid redirect location')
+      }
+      url = next
       res.resume()                                        // discard the redirect body
       continue
     }
@@ -215,7 +243,9 @@ function logName(targetUrl) {
 
 // ── server ────────────────────────────────────────────────────────────────────
 
-export function createProxyServer({ ocUserUrl = OC_USER_URL, lookup, isPrivate = isPrivateAddress } = {}) {
+export { createProxyServer, makeAuthenticator }
+
+function createProxyServer({ ocUserUrl = OC_USER_URL, lookup, isPrivate = isPrivateAddress } = {}) {
   // Own connection pools, not the process-global agent. A pooled keep-alive
   // socket is reused by host:port without a new lookup — correct here, since
   // every socket in these pools was opened through guardedLookup, but a shared

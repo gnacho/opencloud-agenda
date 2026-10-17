@@ -5,7 +5,7 @@
 import { test, describe, before, after, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
-import { createProxyServer, isPrivateAddress, makeGuardedLookup } from './server.js'
+import { createProxyServer, isPrivateAddress, makeGuardedLookup, makeAuthenticator } from './server.js'
 
 const ICS = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n'
 
@@ -81,6 +81,8 @@ describe('proxy end to end', () => {
           res.writeHead(302, { Location: '/feed.ics' }); res.end(); break
         case '/loop':
           res.writeHead(302, { Location: '/loop' }); res.end(); break
+        case '/bad-redirect':
+          res.writeHead(302, { Location: 'http://' }); res.end(); break
         case '/to-private':
           res.writeHead(302, { Location: `http://127.0.0.1:${feedPort}/feed.ics` }); res.end(); break
         case '/big-declared':
@@ -239,6 +241,11 @@ describe('proxy end to end', () => {
       assert.equal(r.status, 502)
       assert.match(await r.text(), /too many redirects/)
     })
+    test('a malformed redirect Location answers 502, not 500 (issue #7)', async () => {
+      const r = await via(lenientPort, feedUrl('/bad-redirect'))
+      assert.equal(r.status, 502)
+      assert.match(await r.text(), /invalid redirect location/)
+    })
     test('HEAD answers without a body', async () => {
       const r = await via(lenientPort, feedUrl('/feed.ics'), { method: 'HEAD' })
       assert.equal(r.status, 200)
@@ -279,5 +286,40 @@ describe('proxy end to end', () => {
         log.mock.restore()
       }
     })
+  })
+})
+
+// ── issue #7: the auth cache must evict per entry, not flush wholesale ───────
+describe('auth cache eviction (issue #7)', () => {
+  test('evicts the least recently used entry instead of clearing the cache', async () => {
+    const ocsCalls = []
+    const ocs = http.createServer((req, res) => {
+      ocsCalls.push(req.headers.authorization)
+      res.writeHead(200); res.end()
+    })
+    const ocsPort = await listen(ocs)
+    const authenticate = makeAuthenticator(`http://127.0.0.1:${ocsPort}/user`)
+
+    try {
+      // Fill the cache to its cap: inserting token 1000 evicts token 0.
+      const tokens = Array.from({ length: 1001 }, (_, i) => `Bearer t${i}`)
+      for (const t of tokens) assert.equal(await authenticate(t), true)
+      assert.equal(ocsCalls.length, 1001)
+
+      // Touch t1: it moves to the back of the LRU order without a new call.
+      assert.equal(await authenticate('Bearer t1'), true)
+      assert.equal(ocsCalls.length, 1001)
+
+      // The next insert evicts the oldest entry — t2, not the touched t1.
+      assert.equal(await authenticate('Bearer t1001'), true)
+      assert.equal(ocsCalls.length, 1002)
+
+      assert.equal(await authenticate('Bearer t2'), true)   // evicted: re-validates
+      assert.equal(ocsCalls.length, 1003)
+      assert.equal(await authenticate('Bearer t1'), true)   // touched: still cached
+      assert.equal(ocsCalls.length, 1003)
+    } finally {
+      ocs.close()
+    }
   })
 })
