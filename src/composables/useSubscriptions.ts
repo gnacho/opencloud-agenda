@@ -42,8 +42,16 @@ function loadFromStorage(userId: string): IcsSubscription[] {
   }
 }
 
-function saveToStorage(userId: string, subs: IcsSubscription[]) {
-  localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(subs))
+/** Returns false when the write fails (quota exceeded, private mode): the
+ *  in-memory list keeps working and the server copy is unaffected, but the
+ *  offline cache is not kept. The caller surfaces that to the user. */
+function saveToStorage(userId: string, subs: IcsSubscription[]): boolean {
+  try {
+    localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(subs))
+    return true
+  } catch {
+    return false
+  }
 }
 
 // Feed URLs are often capability URLs — Google's and Outlook's private feeds
@@ -264,7 +272,7 @@ export function useSubscriptions(
         const merged = mergeSubscriptions(local, server.subs)
         const capturedVersion = modifyVersion
         subscriptions.value = merged
-        saveToStorage(uid, merged)
+        persistToStorage(uid, merged)
         if (!unsyncedAtStart) return  // mid-flight change — its own write is pending
         const { ok, list } = await pushToServer(uid, token, merged)
         if (mySession !== session) return
@@ -273,13 +281,13 @@ export function useSubscriptions(
           clearUnsynced(uid)
           if (list !== merged) {
             subscriptions.value = list
-            saveToStorage(uid, list)
+            persistToStorage(uid, list)
           }
         }
       } else {
         subscriptions.value = server.subs
         // Keep local cache in sync.
-        saveToStorage(uid, server.subs)
+        persistToStorage(uid, server.subs)
         locallyModified = false
       }
     } else {
@@ -289,9 +297,18 @@ export function useSubscriptions(
 
   let writeTimer: ReturnType<typeof setTimeout> | null = null
 
+  // Storage wrapper: a failed localStorage write used to throw out of load()
+  // and skip the feed fetches entirely, leaving the list rendered but never
+  // persisted and never fetched (issue #6).
+  function persistToStorage(uid: string, subs: IcsSubscription[]) {
+    if (!saveToStorage(uid, subs)) {
+      onSyncError?.(t('Subscriptions could not be stored in this browser - they will not survive a page reload'))
+    }
+  }
+
   function persist() {
     const uid = userId()
-    saveToStorage(uid, subscriptions.value)
+    persistToStorage(uid, subscriptions.value)
     // Debounce server writes: rapid successive changes cancel the previous
     // pending write so only the latest snapshot reaches the server.
     if (writeTimer !== null) clearTimeout(writeTimer)
@@ -327,7 +344,7 @@ export function useSubscriptions(
                 // A concurrent change was merged in — adopt the reconciled list
                 // so the UI shows what the server now holds.
                 subscriptions.value = list
-                saveToStorage(snapshotUid, list)
+                persistToStorage(snapshotUid, list)
               }
             }
           } else {
@@ -343,9 +360,12 @@ export function useSubscriptions(
   }
 
   function addSubscription(url: string, name: string, color: string) {
-    subscriptions.value = [...subscriptions.value, { id: uuidv4(), url, name, color, enabled: true }]
+    const sub = { id: uuidv4(), url, name, color, enabled: true }
+    subscriptions.value = [...subscriptions.value, sub]
     persist()
-    fetchAll()
+    // Fetch only the new feed: fetchAll() used to re-download every feed and
+    // overlap with the watcher's own fetchAll, downloading the same feed twice.
+    fetchOne(sub)
   }
 
   function removeSubscription(id: string) {
@@ -371,12 +391,21 @@ export function useSubscriptions(
     return `/ics-proxy/${encodeURIComponent(url)}`
   }
 
+  // One controller per in-flight feed fetch: a newer fetch for the same feed
+  // (or a user switch) aborts the previous one, so two responses for the same
+  // feed can no longer race with "last one wins".
+  const feedControllers = new Map<string, AbortController>()
+
   async function fetchOne(sub: IcsSubscription) {
     const mySession = session
+    feedControllers.get(sub.id)?.abort()
+    const ctrl = new AbortController()
+    feedControllers.set(sub.id, ctrl)
     setFetching(sub.id, true)
     try {
       const res = await fetch(proxyUrl(sub.url), {
         headers: accessToken() ? { Authorization: `Bearer ${accessToken()}` } : {},
+        signal: ctrl.signal,
       })
       if (!res.ok) {
         const reasons: Record<number, string> = {
@@ -427,12 +456,19 @@ export function useSubscriptions(
       delete errs[sub.id]
       subscriptionErrors.value = errs
     } catch (e) {
-      if (mySession !== session) return  // discard errors from a previous session
+      // Aborted (superseded by a newer fetch for this feed) or from a previous
+      // session: the result is obsolete, not an error the user should see.
+      if (mySession !== session || ctrl.signal.aborted) return
       const msg = e instanceof Error ? e.message : String(e)
       subscriptionErrors.value = { ...subscriptionErrors.value, [sub.id]: msg }
       onError?.(sub.name, msg, sub.url)
     } finally {
-      setFetching(sub.id, false)
+      // Only the fetch that is still current may clear the flag; a superseded
+      // one would hide the spinner of its replacement.
+      if (feedControllers.get(sub.id) === ctrl) {
+        feedControllers.delete(sub.id)
+        setFetching(sub.id, false)
+      }
     }
   }
 
@@ -472,6 +508,8 @@ export function useSubscriptions(
     const [oldUid, oldToken] = old ?? [undefined, undefined]
     if (!uid) {
       session++  // invalidate all in-flight requests for the previous user
+      for (const c of feedControllers.values()) c.abort()
+      feedControllers.clear()
       locallyModified = false
       modifyVersion++
       subscriptions.value = []
@@ -486,6 +524,8 @@ export function useSubscriptions(
     if (!token && oldToken) flushAndForget(uid, oldToken)
     if (uid !== oldUid || (token && !oldToken)) {
       session++  // invalidate requests from the previous user/session
+      for (const c of feedControllers.values()) c.abort()
+      feedControllers.clear()
       if (uid !== oldUid) {
         // Clear all state immediately so user A's data is never visible
         // while user B's content is loading.

@@ -832,3 +832,115 @@ describe('useSubscriptions — concurrent writes', () => {
     expect(localStorageData['agenda_subscriptions_user-conflict_unsynced']).toBe('1')
   })
 })
+
+// ── issue #6: unguarded storage write and no request cancellation ────────────
+describe('useSubscriptions — storage failures and feed fetch cancellation (issue #6)', () => {
+  it('surfaces a failed localStorage write via onSyncError and still fetches the feed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('subscriptions.json')) {
+        return { ok: true, json: async () => [], headers: { get: () => null } } as unknown as Response
+      }
+      return { ok: true, status: 200, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR', headers: { get: () => 'text/calendar' } } as unknown as Response
+    }))
+
+    // Quota exceeded (or private mode) from the very first write.
+    const originalSetItem = localStorage.setItem
+    localStorage.setItem = () => { throw new Error('QuotaExceededError') }
+
+    try {
+      const userId = ref('user-quota')
+      const accessToken = ref('tok')
+      const syncErrors: string[] = []
+      const api = useSubscriptions(
+        () => userId.value,
+        () => accessToken.value,
+        undefined,
+        (m: string) => syncErrors.push(m),
+      )
+      await flush()
+      // load() could not cache the list: the user is told, once.
+      expect(syncErrors.length).toBe(1)
+
+      const fetchMock = vi.mocked(fetch)
+      const before = fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).includes('ics-proxy')).length
+
+      api.addSubscription('https://quota.test/q.ics', 'Q', '#123abc')
+      await flush()
+
+      // the user is told again (persist after the add)…
+      expect(syncErrors.length).toBe(2)
+      expect(syncErrors[1]).toContain('could not be stored in this browser')
+      // …the subscription is in the list, and its feed was fetched anyway.
+      expect(api.subscriptions.value.map((s: { url: string }) => s.url)).toContain('https://quota.test/q.ics')
+      const after = fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).includes('ics-proxy')).length
+      expect(after).toBeGreaterThan(before)
+    } finally {
+      localStorage.setItem = originalSetItem
+    }
+  })
+
+  it('addSubscription fetches only the new feed, not every feed again', async () => {
+    const feedCalls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('subscriptions.json')) {
+        return { ok: true, json: async () => [
+          { id: 'a', url: 'https://a.test/a.ics', name: 'A', color: '#f00', enabled: true },
+          { id: 'b', url: 'https://b.test/b.ics', name: 'B', color: '#0f0', enabled: true },
+        ], headers: { get: () => null } } as unknown as Response
+      }
+      feedCalls.push(String(url))
+      return { ok: true, status: 200, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR', headers: { get: () => 'text/calendar' } } as unknown as Response
+    }))
+
+    const { addSubscription, subscriptions } = makeSubs('user-addfeed', 'tok')
+    await flush()
+    expect(feedCalls.filter((u) => u.includes('ics-proxy'))).toHaveLength(2)
+
+    addSubscription('https://c.test/c.ics', 'C', '#00f')
+    await flush()
+
+    const added = feedCalls.slice(2)
+    expect(added).toHaveLength(1)
+    expect(added[0]).toContain('c.test')
+    expect(subscriptions.value).toHaveLength(3)
+  })
+
+  it('aborts a superseded feed fetch; the old one stays silent', async () => {
+    const signals: AbortSignal[] = []
+    const pending: Array<(v: Response) => void> = []
+    vi.stubGlobal('fetch', vi.fn((url: string, opts?: { signal?: AbortSignal }) => {
+      if (String(url).includes('subscriptions.json')) {
+        return Promise.resolve({ ok: true, json: async () => [
+          { id: 's1', url: 'https://a.test/a.ics', name: 'A', color: '#f00', enabled: true },
+        ], headers: { get: () => null } } as unknown as Response)
+      }
+      signals.push(opts!.signal!)
+      return new Promise<Response>((r) => pending.push(r))
+    }))
+
+    const { toggleSubscription, subscriptionErrors, fetchingSubscriptions, subscriptions } = makeSubs('user-abort', 'tok')
+    await flush()
+    expect(signals).toHaveLength(1)
+
+    // disable + re-enable starts a second fetch of the same feed, which
+    // supersedes (aborts) the first one
+    toggleSubscription(subscriptions.value[0].id)
+    toggleSubscription(subscriptions.value[0].id)
+    await flush()
+    expect(signals).toHaveLength(2)
+    expect(signals[0].aborted).toBe(true)
+    expect(signals[1].aborted).toBe(false)
+
+    // the aborted fetch settles with a server error afterwards: no error may
+    // surface, and it must not clear the fetching flag of its replacement
+    pending[0]({ ok: false, status: 500 } as Response)
+    await flush()
+    expect(Object.keys(subscriptionErrors.value)).toHaveLength(0)
+    expect(fetchingSubscriptions.value.has('s1')).toBe(true)
+
+    pending[1]({ ok: true, status: 200, text: async () => 'BEGIN:VCALENDAR\nEND:VCALENDAR', headers: { get: () => 'text/calendar' } } as unknown as Response)
+    await flush()
+    expect(fetchingSubscriptions.value.has('s1')).toBe(false)
+    expect(Object.keys(subscriptionErrors.value)).toHaveLength(0)
+  })
+})
