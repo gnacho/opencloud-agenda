@@ -293,6 +293,7 @@ export class CalDavClient {
     url: string,
     body?: string,
     extraHeaders: Record<string, string> = {},
+    signal?: AbortSignal,
   ): Promise<Response> {
     const headers: Record<string, string> = {
       Authorization: this.authHeader,
@@ -305,7 +306,7 @@ export class CalDavClient {
       throw new Error(`CalDAV ${method} refused: ${url} is outside ${this.origin}`)
     }
 
-    const res = await fetch(url, { method, headers, body })
+    const res = await fetch(url, { method, headers, body, signal })
     if (!res.ok && res.status !== 207) {
       throw new Error(`CalDAV ${method} ${url} → ${res.status} ${res.statusText}`)
     }
@@ -313,7 +314,7 @@ export class CalDavClient {
   }
 
   // PROPFIND: discover calendars
-  async listCalendars(): Promise<Calendar[]> {
+  async listCalendars(signal?: AbortSignal): Promise<Calendar[]> {
     const body = `<?xml version="1.0" encoding="utf-8"?>
 <propfind xmlns="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/" xmlns:oc="http://owncloud.org/ns">
   <prop>
@@ -328,7 +329,7 @@ export class CalDavClient {
     const res = await this.request('PROPFIND', this.baseUrl, body, {
       'Content-Type': 'application/xml; charset=utf-8',
       Depth: '1',
-    })
+    }, signal)
 
     const xml = await res.text()
     const calendars: Calendar[] = []
@@ -354,7 +355,7 @@ export class CalDavClient {
   }
 
   // REPORT: fetch all events (no server-side time filter — more reliable with Radicale)
-  async fetchEvents(calendarHref: string, _from: Date, _to: Date): Promise<CalendarEvent[]> {
+  async fetchEvents(calendarHref: string, _from: Date, _to: Date, signal?: AbortSignal): Promise<CalendarEvent[]> {
     const body = `<?xml version="1.0" encoding="utf-8"?>
 <calendar-query xmlns="urn:ietf:params:xml:ns:caldav" xmlns:d="DAV:">
   <d:prop>
@@ -371,7 +372,7 @@ export class CalDavClient {
     const res = await this.request('REPORT', calendarHref, body, {
       'Content-Type': 'application/xml; charset=utf-8',
       Depth: '1',
-    })
+    }, signal)
 
     const xml = await res.text()
     const doc = parseXml(xml)
