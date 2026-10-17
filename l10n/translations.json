@@ -151,7 +151,8 @@
     "week(s)": "Woche(n)",
     "year(s)": "Jahr(e)",
     "↻ button in the sidebar → manually refresh data from the server (e.g. after syncing with Thunderbird)": "↻-Button in der Sidebar → Daten manuell vom Server laden (z. B. nach Sync mit Thunderbird)",
-    "↻ button reloads all subscriptions": "↻-Button lädt alle Abonnements neu"
+    "↻ button reloads all subscriptions": "↻-Button lädt alle Abonnements neu",
+    "Subscriptions could not be stored in this browser - they will not survive a page reload": "Abonnements konnten in diesem Browser nicht gespeichert werden - sie überleben kein Neuladen der Seite"
   },
   "es": {
     "+ New": "+ Nuevo",
@@ -305,6 +306,7 @@
     "week(s)": "semana(s)",
     "year(s)": "año(s)",
     "↻ button in the sidebar → manually refresh data from the server (e.g. after syncing with Thunderbird)": "Botón ↻ en la barra lateral → recargar los datos del servidor a mano (p. ej. tras sincronizar con Thunderbird)",
-    "↻ button reloads all subscriptions": "El botón ↻ recarga todas las suscripciones"
+    "↻ button reloads all subscriptions": "El botón ↻ recarga todas las suscripciones",
+    "Subscriptions could not be stored in this browser - they will not survive a page reload": "Las suscripciones no se han podido guardar en este navegador - no sobrevivirán a una recarga de la página"
   }
 }
