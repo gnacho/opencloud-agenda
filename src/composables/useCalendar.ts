@@ -24,6 +24,21 @@ export function useCalendar() {
   let lastLoadedUserId = ''
   let lastLoadedPathId = ''
 
+  // Incremented on every logout or user-switch. Each load captures the value
+  // at start and bails silently before ANY state write if it has changed by
+  // the time a response arrives — same pattern as useSubscriptions, so a slow
+  // reply from the previous user can never leak into the current session.
+  let session = 0
+  // Monotonic ids per load kind. Two loads started in the same millisecond tie
+  // with a Date.now() epoch (the old guard), so a clock is not used: a higher
+  // id always wins, regardless of timing.
+  let calendarsLoadId = 0
+  let eventsLoadId = 0
+  // In-flight CalDAV loads are aborted when a newer load supersedes them or on
+  // user switch, so stale responses cannot even reach the parsing stage.
+  let calendarsAborter: AbortController | null = null
+  let eventsAborter: AbortController | null = null
+
   // current view range (set by CalendarView whenever the FC view changes)
   const viewStart = ref<Date>(new Date())
   const viewEnd = ref<Date>(new Date())
@@ -56,33 +71,51 @@ export function useCalendar() {
   }
 
   async function loadCalendars() {
+    const mySession = session
+    const id = ++calendarsLoadId
+    calendarsAborter?.abort()
+    calendarsAborter = new AbortController()
+    const signal = calendarsAborter.signal
     loading.value = true
     error.value = null
     try {
       let c = await getClient()
       try {
-        calendars.value = await c.listCalendars()
+        const list = await c.listCalendars(signal)
+        if (mySession !== session || id !== calendarsLoadId) return
+        calendars.value = list
       } catch (e: unknown) {
         if (!is401(e)) throw e
+        // Superseded while the 401 arrived: do NOT refreshClient() — it would
+        // revoke the app token an in-flight newer load is already using.
+        if (mySession !== session || id !== calendarsLoadId) return
         // Token was deleted on the server — get a fresh one and retry once.
         c = await refreshClient()
-        calendars.value = await c.listCalendars()
+        const list = await c.listCalendars(signal)
+        if (mySession !== session || id !== calendarsLoadId) return
+        calendars.value = list
       }
       if (calendars.value.length && !activeCalendarHref.value) {
         activeCalendarHref.value = calendars.value[0].href
       }
     } catch (e: unknown) {
+      if (mySession !== session || id !== calendarsLoadId) return
       error.value = e instanceof Error ? e.message : String(e)
     } finally {
-      loading.value = false
+      // A discarded load must not clear the flag of the load that is current.
+      if (mySession === session && id === calendarsLoadId) loading.value = false
     }
   }
 
   async function loadEvents(from: Date, to: Date) {
     if (!calendars.value.length) return
+    const mySession = session
+    const id = ++eventsLoadId
+    eventsAborter?.abort()
+    eventsAborter = new AbortController()
+    const signal = eventsAborter.signal
     loading.value = true
     error.value = null
-    const epoch = Date.now()
     try {
       const c = await getClient()
       const all: CalendarEvent[] = []
@@ -92,21 +125,21 @@ export function useCalendar() {
         // baking it in wrote the calendar's colour into the stored .ics file —
         // after which the event kept that colour even when moved to a calendar
         // of a different colour. The view derives the colour from calendarHref.
-        const evs = await c.fetchEvents(cal.href, from, to)
+        const evs = await c.fetchEvents(cal.href, from, to, signal)
         all.push(...evs)
       }
-      // epoch-guard: discard if a newer load finished first
-      if (epoch < lastEpoch) return
-      lastEpoch = epoch
+      // Discard if a newer load superseded this one or the user switched.
+      if (mySession !== session || id !== eventsLoadId) return
       events.value = all
     } catch (e: unknown) {
+      // Aborted or superseded loads stay silent: their result is obsolete, not
+      // an error the user should see.
+      if (mySession !== session || id !== eventsLoadId) return
       error.value = e instanceof Error ? e.message : String(e)
     } finally {
-      loading.value = false
+      if (mySession === session && id === eventsLoadId) loading.value = false
     }
   }
-
-  let lastEpoch = 0
 
   async function saveEvent(event: CalendarEvent): Promise<CalendarEvent> {
     const c = await getClient()
@@ -218,6 +251,11 @@ export function useCalendar() {
   // exactly one initialisation path and no concurrent getAppToken() calls.
   watch([userId, accessToken], async ([newUser], [oldUser]) => {
     if (newUser !== oldUser) {
+      // Invalidate every in-flight load of the previous user before clearing:
+      // their responses must never reach calendars.value / events.value.
+      session++
+      calendarsAborter?.abort()
+      eventsAborter?.abort()
       client = null
       calendars.value = []
       events.value = []
