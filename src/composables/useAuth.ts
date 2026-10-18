@@ -29,7 +29,12 @@ function tokenKeys(storage: Storage): string[] {
 function readToken(key: string): StoredToken | null {
   try {
     const raw = sessionStorage.getItem(key)
-    return raw ? JSON.parse(raw) : null
+    if (!raw) return null
+    const stored = JSON.parse(raw)
+    // Validate the shape: a corrupted or hand-edited entry must not reach the
+    // request path (token used in URLs, expiresAt compared against Date.now).
+    if (typeof stored?.token !== 'string' || typeof stored?.expiresAt !== 'number') return null
+    return stored as StoredToken
   } catch {
     return null
   }

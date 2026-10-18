@@ -173,4 +173,11 @@ describe('getNthWeekday', () => {
   it('returns 1TU for April 7 2026 (1st Tuesday)', () => {
     expect(getNthWeekday(new Date('2026-04-07T00:00:00'))).toBe('1TU')
   })
+
+  it('returns -1 (last) for the fifth occurrence of a weekday', () => {
+    // 2026-05-30 is the 5th Saturday of May; a 6th occurrence cannot exist,
+    // so -1 is exact and matches what other CalDAV clients write for the
+    // last weekday of the month ("5SA" would almost never match anything).
+    expect(getNthWeekday(new Date('2026-05-30T00:00:00'))).toBe('-1SA')
+  })
 })
