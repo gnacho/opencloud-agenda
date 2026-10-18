@@ -17,8 +17,12 @@ export interface ParsedRrule {
 
 export function getNthWeekday(date: Date): string {
   const day = DAY_NAMES[date.getDay()]
-  const n = Math.ceil(date.getDate() / 7) // 1–4
-  return `${n}${day}`
+  // A 5th occurrence (days 29-31) is always the last one of its weekday in
+  // the month — a 6th cannot exist — so the conventional -1 ("last Saturday")
+  // is exact here and matches what other CalDAV clients write, while "5SA"
+  // would almost never match a real occurrence.
+  const n = Math.ceil(date.getDate() / 7)
+  return `${n === 5 ? -1 : n}${day}`
 }
 
 export function parseRrule(rrule: string): ParsedRrule {

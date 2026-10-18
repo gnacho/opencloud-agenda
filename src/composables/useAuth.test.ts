@@ -63,6 +63,16 @@ describe('app token storage', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('ignores a stored session entry with the wrong shape instead of using it', async () => {
+    // A corrupted or hand-edited session entry must not reach the request
+    // path: token must be a string and expiresAt a number, else the entry is
+    // discarded and a fresh token is requested.
+    sessionStorage.setItem(KEY, JSON.stringify({ token: 123, expiresAt: 'soon' }))
+    const { getAppToken } = useAuth()
+    expect(await getAppToken()).toBe('app-1')
+    expect(fetchMock).toHaveBeenCalled()
+  })
+
   it('clearAppToken drops the cached token and revokes it on the server', async () => {
     const { getAppToken, clearAppToken } = useAuth()
     await getAppToken()

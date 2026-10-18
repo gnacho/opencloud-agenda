@@ -121,6 +121,7 @@ import { newEventHref } from '@/services/caldav'
 import type { Calendar, CalendarEvent } from '@/services/caldav'
 import { useI18n } from '@/composables/useI18n'
 import { DAY_NAMES, getNthWeekday, parseRrule, buildRrule as buildRruleUtil } from '@/utils/rrule'
+import { findCalendarByHref } from '@/utils/calendarMatch'
 import type { RepeatFreq, RepeatEnd } from '@/utils/rrule'
 import { addDays } from '@/utils/eventFormat'
 import { parseFormDates, validateFormDates } from '@/utils/eventForm'
@@ -181,7 +182,7 @@ const defaultStart = props.defaultStart ?? new Date()
 const defaultEnd = props.defaultEnd ?? new Date(defaultStart.getTime() + 60 * 60 * 1000)
 const defaultCalHref =
   props.event?.calendarHref
-    ? props.calendars.find(c => props.event!.calendarHref.startsWith(c.href))?.href ?? props.activeCalendarHref ?? props.calendars[0]?.href ?? ''
+    ? findCalendarByHref(props.calendars, props.event!.calendarHref)?.href ?? props.activeCalendarHref ?? props.calendars[0]?.href ?? ''
     : props.activeCalendarHref ?? props.calendars[0]?.href ?? ''
 
 // For all-day events, iCal DTEND is exclusive (= last day + 1).
@@ -273,7 +274,7 @@ function handleSave() {
     // Compute the target calendarHref: if the user picked a different calendar,
     // build a new .ics URL in that collection. The file name is a fresh UUID —
     // the UID comes from the stored ICS and must not end up in the path.
-    const currentCal = props.calendars.find(c => props.event!.calendarHref.startsWith(c.href))
+    const currentCal = findCalendarByHref(props.calendars, props.event!.calendarHref)
     const calendarChanged = form.calendarHref !== currentCal?.href
 
     if (calendarChanged && props.event!.seriesUid) {

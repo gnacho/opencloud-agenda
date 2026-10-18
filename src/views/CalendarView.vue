@@ -167,6 +167,7 @@ import { currentLanguage, useI18n } from '@/composables/useI18n'
 import { useMessages } from '@opencloud-eu/web-pkg'
 import type { CalendarEvent } from '@/services/caldav'
 import { addDays, formatEventRange } from '@/utils/eventFormat'
+import { findCalendarByHref } from '@/utils/calendarMatch'
 import { contrastText, isNearWhite, schemeForBackground } from '@/utils/theme'
 
 const { t, isGerman, localeTag } = useI18n()
@@ -282,7 +283,7 @@ function openEditEvent(event: CalendarEvent) {
 const fcEvents = computed(() => {
   const caldavEvents = events.value
     .filter(e => {
-      const cal = calendars.value.find(c => e.calendarHref.startsWith(c.href))
+      const cal = findCalendarByHref(calendars.value, e.calendarHref)
       return cal ? !hiddenCalendars.value.has(cal.href) : true
     })
     .map(e => ({
@@ -313,7 +314,7 @@ const fcEvents = computed(() => {
 })
 
 function activeCalColor(href: string): string {
-  return calendars.value.find(c => href.startsWith(c.href))?.color ?? '#0082c9'
+  return findCalendarByHref(calendars.value, href)?.color ?? '#0082c9'
 }
 
 // The colour is the user's choice and can be anything, including white. The
