@@ -134,6 +134,123 @@ export function buildIcs(event: Omit<CalendarEvent, 'calendarHref' | 'etag'>): s
 // Expansion window for recurring events (years back and forward from now)
 const EXPAND_YEARS = 2
 
+// ---------- editing an existing object without losing foreign data ----------
+
+// Everything a stored .ics file may carry that this app has no field for:
+// VALARM (the alarms other clients rely on), ATTENDEE, ORGANIZER, STATUS,
+// TRANSP, SEQUENCE, CREATED, LAST-MODIFIED, CATEGORIES, URL, GEO, EXDATE and
+// any X-*. Rewriting the object from the model dropped all of it, so an edit
+// made here silently removed reminders and invitations set on the phone.
+// mergeIcs() patches only the properties the model owns and leaves the rest.
+
+/** The VEVENT an edit refers to: the series master, never an override. */
+function editableEvent(comp: ICAL.Component, uid: string): ICAL.Component | undefined {
+  const vevents = comp.getAllSubcomponents('vevent')
+  const master = vevents.filter((v) => !v.getFirstPropertyValue('recurrence-id'))
+  return master.find((v) => v.getFirstPropertyValue('uid') === uid) ?? master[0] ?? vevents[0]
+}
+
+/** Floating ICAL.Time from a compact wall-clock stamp (YYYYMMDDTHHMMSS). */
+function floatingTime(stamp: string): ICAL.Time {
+  return ICAL.Time.fromDateTimeString(
+    `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T` +
+    `${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}`,
+  )
+}
+
+function localDateStamp(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+// Replacing the property (instead of updating its value) also drops a stale
+// TZID or VALUE parameter when the event switches between timed all-day and
+// between zones.
+function setDateProperty(vevent: ICAL.Component, name: string, value: ICAL.Time, zone?: string): void {
+  const prop = new ICAL.Property(name)
+  prop.setValue(value)
+  if (zone) prop.setParameter('tzid', zone)
+  vevent.removeProperty(name)
+  vevent.addProperty(prop)
+}
+
+/** Add the VTIMEZONE for `zone` when the object does not define it yet. */
+function ensureVTimeZone(comp: ICAL.Component, zone: string): void {
+  const defined = comp.getAllSubcomponents('vtimezone')
+    .some((tz) => tz.getFirstPropertyValue('tzid') === zone)
+  if (defined) return
+  const lines = buildVTimeZone(zone)
+  if (lines.length === 0) return
+  const wrapper = ICAL.parse(['BEGIN:VCALENDAR', ...lines, 'END:VCALENDAR'].join('\r\n'))
+  for (const tz of new ICAL.Component(wrapper).getAllSubcomponents('vtimezone')) {
+    comp.addSubcomponent(tz)
+  }
+}
+
+/**
+ * Patch an existing calendar object with the fields this app edits, keeping
+ * every other property and subcomponent untouched. Falls back to a fresh
+ * object when the stored body cannot be parsed or has no VEVENT.
+ */
+export function mergeIcs(
+  existingIcs: string,
+  event: Omit<CalendarEvent, 'calendarHref' | 'etag'>,
+): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let comp: ICAL.Component
+  try {
+    comp = new ICAL.Component(ICAL.parse(existingIcs))
+  } catch {
+    return buildIcs(event)
+  }
+  const vevent = editableEvent(comp, event.seriesUid ?? event.uid)
+  if (!vevent) return buildIcs(event)
+
+  const zone = event.allDay ? '' : userTimeZone()
+  const usesZone = zone !== '' && zone !== 'UTC'
+
+  vevent.updatePropertyWithValue('summary', event.title)
+  vevent.updatePropertyWithValue('dtstamp', ICAL.Time.fromJSDate(new Date(), true))
+
+  if (event.allDay) {
+    setDateProperty(vevent, 'dtstart', ICAL.Time.fromDateString(localDateStamp(event.start)))
+    setDateProperty(vevent, 'dtend', ICAL.Time.fromDateString(localDateStamp(event.end)))
+  } else if (usesZone) {
+    ensureVTimeZone(comp, zone)
+    setDateProperty(vevent, 'dtstart', floatingTime(localCompact(zone, event.start.getTime())), zone)
+    setDateProperty(vevent, 'dtend', floatingTime(localCompact(zone, event.end.getTime())), zone)
+  } else {
+    setDateProperty(vevent, 'dtstart', ICAL.Time.fromJSDate(event.start, true))
+    setDateProperty(vevent, 'dtend', ICAL.Time.fromJSDate(event.end, true))
+  }
+
+  // Optional fields: a missing value in the model means the property must go.
+  const color = safeColor(event.color)
+  const rrule = safeRrule(event.rrule)
+  const optional: Array<[string, string | undefined]> = [
+    ['description', event.description],
+    ['location', event.location],
+    ['color', color],
+    ['rrule', rrule],
+  ]
+  for (const [name, value] of optional) {
+    if (!value) {
+      vevent.removeProperty(name)
+    } else if (name === 'rrule') {
+      vevent.updatePropertyWithValue(name, ICAL.Recur.fromString(value))
+    } else {
+      vevent.updatePropertyWithValue(name, value)
+    }
+  }
+
+  if (vevent.getFirstProperty('last-modified')) {
+    vevent.updatePropertyWithValue('last-modified', ICAL.Time.fromJSDate(new Date(), true))
+  }
+
+  return comp.toString()
+}
+
+
 // Limits for recurrence expansion. One ical.js iterator step costs roughly
 // 5–10 µs, so the per-event cap alone still let a feed with many
 // FREQ=MINUTELY events from 1900 freeze the tab for minutes. The budget is
@@ -403,6 +520,23 @@ export class CalDavClient {
   async saveEvent(event: CalendarEvent): Promise<string | undefined> {
     const ics = buildIcs(event)
     const res = await this.request('PUT', event.calendarHref, ics)
+    return res.headers.get('ETag')?.replace(/"/g, '') ?? undefined
+  }
+
+  // Edit an existing object: GET + merge + PUT, so properties this app does
+  // not model (VALARM, ATTENDEE, X-*, …) survive. `sourceHref` differs from
+  // event.calendarHref when the event moves to another calendar: the body is
+  // read from the old location and written to the new one.
+  async updateEvent(sourceHref: string, event: CalendarEvent): Promise<string | undefined> {
+    let existing: string | undefined
+    try {
+      existing = await (await this.request('GET', sourceHref)).text()
+    } catch {
+      // Nothing readable to merge with (moved or deleted elsewhere): create.
+      existing = undefined
+    }
+    const body = existing === undefined ? buildIcs(event) : mergeIcs(existing, event)
+    const res = await this.request('PUT', event.calendarHref, body)
     return res.headers.get('ETag')?.replace(/"/g, '') ?? undefined
   }
 
