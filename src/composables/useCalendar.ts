@@ -167,9 +167,10 @@ export function useCalendar() {
     const original = events.value.find(e => e.uid === event.uid)
 
     if (original && original.calendarHref !== event.calendarHref) {
-      // Calendar changed — move: PUT to new location, then DELETE from old.
+      // Calendar changed — move: read the old object, write the merged body to
+      // the new location, then DELETE the old one.
       const c = await getClient()
-      const newEtag = await c.saveEvent(event)
+      const newEtag = await c.updateEvent(original.calendarHref, event)
       await c.deleteEvent({ ...original })
       events.value = events.value.map(e =>
         e.uid === event.uid ? { ...event, etag: newEtag ?? event.etag } : e
@@ -205,7 +206,11 @@ export function useCalendar() {
           : e
       )
     } else {
-      const saved = await saveEvent(event)
+      // Plain edit — GET + merge + PUT so alarms, attendees and any other
+      // property set by another client are not dropped by the rewrite.
+      const c = await getClient()
+      const newEtag = await c.updateEvent(event.calendarHref, event)
+      const saved = { ...event, etag: newEtag ?? event.etag }
       events.value = events.value.map(e => (e.uid === event.uid ? saved : e))
     }
   }
