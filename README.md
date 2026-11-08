@@ -35,7 +35,22 @@ A CalDAV calendar web application for [OpenCloud](https://opencloud.eu) 8.x, bui
 
 ## Installation
 
-### Option A: Download the release zip (recommended)
+### The easy way (`ocapps-ext`)
+
+Our mirror publishes a build per tag (`agenda-X.Y.Z.zip`), so the app can be
+installed and updated from the server with
+[`ocapps-ext`](https://github.com/gnacho/ocapps/blob/main/deploy/README.md):
+
+```bash
+ocapps-ext install agenda    # first install: download, apps.yaml entry, restart, verify
+ocapps-ext update            # update every app that came from a release
+ocapps-ext rollback agenda   # restore the previous directory
+```
+
+It needs a running Radicale behind the OpenCloud proxy (`/caldav/`), see the
+[OpenCloud DAV deployment notes](docs/deployment-workflow.dokuwiki.txt).
+
+### Option A: Download the release zip (manual)
 
 1. Download and unzip the latest release (replace `v1.4.0` with the current version):
 
